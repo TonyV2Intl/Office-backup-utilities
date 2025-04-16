@@ -21,7 +21,7 @@ def save_open_ppt_files(save_folder):   #定义保存函数，参数save_folder�
         
         time.sleep(180)   # 每3分钟轮询一次
         
-save_folder=r'D:\tech\pptbackup'   #指定备份路径，r表示取原始字符串，需要更改请更改引号内部分
+save_folder=r'C:\pptbackup'   #指定备份路径，r表示取原始字符串，需要更改请更改引号内部分
 while True:   #第二层（调用层）无限循环
     try:
         save_open_ppt_files(save_folder)   #调用函数
