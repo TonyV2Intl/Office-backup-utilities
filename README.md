@@ -1,11 +1,20 @@
-一个用来备份当前打开的PPT和Word文档的Python小程序
+**一个用来备份当前打开的PPT和Word文档的Python小程序**
 
-**请下载稳定版本：4.0（推荐，shutil为主，SaveAs备份）或2.0（SaveAs）**
+**请下载稳定版本：4.0（推荐，shutil为主，SaveAs备用）或2.0（SaveAs，有实时备份修改内容的需求可尝试使用，但未经过测试）**<br>
+pptbackup4.0-WPS版本**只支持WPS专业版**，**官网最新个人版不可用**，WPS2019教育考试专用版经实测可用，可至https://hellowindows.cn/中的Office/WPS分区下载，来自此网站的WPS2019教育考试专用版123云盘链接：https://www.123pan.com/s/ZrzA-2UZgh<br>
+wordbackup**不支持WPS**，后续也没有支持计划（会抛出attribute error异常）
 
-​使用方法：
-1.安装好python环境以及pywin32库（在cmd里运行pip install pywin32）
-2.自行修改倒数第7行save_folder变量指定的保存路径（前面的r表示绝对路径），默认在C盘根目录下创建pptbackup文件夹；倒数第9行的time.sleep()里可以自行调节轮询的时间周期，单位是秒，默认为3分钟一次（180秒）
+​使用方法：<br>
+A：直接下载exe文件，无需安装Python环境或运行库即可运行，但只能使用默认的备份路径（"C:\pptbackup"或"C:\wordbackup"）和轮询周期（180秒），无法修改，需要修改路径请使用B方法<br>
+B：1.安装好Python环境以及pywin32库（在cmd里运行pip install pywin32）<br>
+2.自行修改倒数第7行save_folder变量指定的保存路径（前面的r表示绝对路径），默认在C盘根目录下创建pptbackup文件夹；倒数第9行的time.sleep()里可以自行调节轮询的时间周期，单位是秒，默认为3分钟一次（180秒）<br>
 3.（可选）把源码放在某个隐蔽的角落，右键创建一个快捷方式（可以右键打开属性，设置为打开时最小化窗口），按win+r打开运行框，输入shell:startup，这个文件夹是Windows启动项的文件夹，把快捷方式丢进去就可以实现开机自动以最小化窗口运行
+4.（可选，不建议）如果想要完全静默运行，不弹出运行框，先将Python文件名中的空格删除（例如将pptbackup 4.0.py改为pptbackup4.0.py，否则），新建一个文本文档，输入以下代码，其中引号：
+···
+Set ws = CreateObject("Wscript.Shell")
+ws.run "C:\pptbackup4.0.py",vbhide
+···
+
 
 
 
@@ -15,4 +24,4 @@
 
 
 
-3.0版及以上程序的基本原理：使用win32com.client库，通过COM接口与Office应用程序交互（WPS兼容性未知，请自行测试），获取文件路径，再使用shutil库进行文件的复制操作（所以3.0版及以上程序只能备份已保存的文件，正在编辑中的部分无法保存，2.0版程序使用的是SaveAs方法，也许可以进行实时备份）
+3.0版及以上程序的基本原理：使用win32com.client库，通过COM接口与Office应用程序交互，获取文件路径，再使用shutil库进行文件的复制操作（所以3.0版及以上程序只能备份已保存的文件，正在编辑中的部分无法保存，2.0版程序使用的是SaveAs方法，也许可以进行实时备份，请自行测试）
