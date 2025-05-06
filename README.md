@@ -3,7 +3,7 @@
 <br>
 <br>
 **请下载稳定版本：4.0（推荐，shutil为主，SaveAs备用）或2.0（SaveAs，有实时备份修改内容的需求可尝试使用，但未经过测试）**<br>
-pptbackup4.0-WPS版本**只支持WPS专业版**，**官网最新个人版不可用**，WPS2019教育考试专用版经实测可用，可至https://hellowindows.cn/中的Office/WPS分区下载，来自此网站的WPS2019教育考试专用版123云盘链接：https://www.123pan.com/s/ZrzA-2UZgh<br>
+pptbackup4.0-WPS版本**只支持WPS专业版**，**官网最新个人版不可用**，WPS2019教育考试专用版经实测可用，可至 https://hellowindows.cn/ 中的Office/WPS分区下载，来自此网站的WPS2019教育考试专用版123云盘链接：https://www.123pan.com/s/ZrzA-2UZgh<br>
 wordbackup**不支持WPS**，后续也没有支持计划（会抛出attribute error异常）
 
 ​使用方法：<br>
