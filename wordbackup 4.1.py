@@ -61,7 +61,7 @@ def save_open_word_files(save_folder):   #定义保存函数，参数save_folder
             runid+=1   #运行计数器累加
             print(time.strftime('[%H:%M:%S-#') + str(runid) + '] No doc available now')
 
-sleeptime=5   #每3分钟轮询一次        
+sleeptime=180   #每3分钟轮询一次        
 save_folder=r'C:\wordbackup'   #指定备份路径，r表示取原始字符串，需要更改请更改引号内部分
 
 while True:   #无限循环
