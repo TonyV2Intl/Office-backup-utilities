@@ -2,8 +2,8 @@
 <br>
 <br>
 <br>
-**请下载稳定版本：4.0（推荐，shutil为主，SaveAs备用）或2.0（SaveAs，有实时备份修改内容的需求可尝试使用，但未经过测试）**<br>
-pptbackup4.0-WPS版本**只支持WPS专业版**，**官网最新个人版不可用**，WPS2019教育考试专用版经实测可用，可至 https://hellowindows.cn/ 中的Office/WPS分区下载，来自此网站的WPS2019教育考试专用版123云盘链接：https://www.123pan.com/s/ZrzA-2UZgh<br>
+**请下载稳定版本：4.2（推荐，shutil为主，SaveAs备用）或2.0（SaveAs，有实时备份修改内容的需求可尝试使用，但未经过测试）**<br>
+pptbackup的WPS版本**只支持WPS专业版**，**官网最新个人版不可用**，WPS2019教育考试专用版经实测可用，可至 https://hellowindows.cn/ 中的Office/WPS分区下载，来自此网站的WPS2019教育考试专用版123云盘链接：https://www.123pan.com/s/ZrzA-2UZgh<br>
 wordbackup**不支持WPS**，后续也没有支持计划（会抛出attribute error异常）
 
 ​使用方法：<br>
@@ -63,3 +63,10 @@ ws.run "C:\pptbackup4.0.py",vbhide
 ·取消了定义层的死循环，将等待时间放到了调用层，逻辑更合理<br>
 ·删除了多余变量：runiddisplay和copyusedtimedisplay，使用str(runid)和str(copyusedtime)代替<br>
 ·捕获进程部分将Dispatch/DispatchEx('')更改为GetObject(Class='')<br>
+·添加了skippedtime变量，如果备份文件已经存在且跳过次数少于5次（<=5），跳过此次备份操作，否则继续备份<br>
+<br>
+**2025-06-01（4.2预发布）** <br>
+**2025-06-21（4.2发布）** <br>
+**·导入collections库的defaultdict方法，用于跟踪单个文件的跳过次数，防止变量污染；为每个需要备份文件都生成file_skip_count和SaveAs_method_activated两个变量，替代了原来的全局skippedtime变量** <br>
+·捕获进程部分的更改还原，PPT/Word仍然将使用Dispatch/DispatchEx('')，WPS继续使用GetObject(Class='')<br>
+·为创建备份文件夹和开始备份操作增加了输出<br>
