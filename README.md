@@ -1,4 +1,5 @@
 **一个用来备份当前打开的PPT和Word文档的Python小程序**<br>
+**A Python-based mini program for backing up currently open PPT and Word documents**<br>
 <br>
 <br>
 <br>
