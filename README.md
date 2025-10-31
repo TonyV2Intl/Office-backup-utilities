@@ -6,7 +6,7 @@ The source code is open to the public under the MIT license and is fully annotat
 <br>
 <br>
 <br>
-**5.0版本正在实装测试。稳定版本：4.2（推荐，shutil为主，SaveAs备用）或2.0（SaveAs，有实时备份修改内容的需求可尝试使用，但未经过测试）**<br>
+**稳定版本：5.0（推荐，最新，3软件备份功能合一，可对接网盘）、4.2（推荐，经过长期测试 运行稳定，shutil.copy2为主，SaveAs备用）或2.0（SaveAs，有实时备份修改内容的需求可尝试使用，但未经过测试）**<br>
 pptbackup的WPS版本**只支持WPS专业版**，**官网最新个人版不可用**，WPS2019教育考试专用版经实测可用，可至 https://hellowindows.cn/ 中的Office/WPS分区下载，来自此网站的WPS2019教育考试专用版123云盘链接：https://www.123pan.com/s/ZrzA-2UZgh<br>
 wordbackup**不支持WPS**，后续也没有支持计划（会抛出attribute error异常）<br>
 <br>
@@ -14,8 +14,9 @@ wordbackup**不支持WPS**，后续也没有支持计划（会抛出attribute er
 **·新增自动上传至网盘功能（使用第三方pan123库），目前支持123云盘**，可以自行修改相关源码以适配其他网盘<br>
 ·将PPT、Word、WPS三个软件的备份功能整合到单个程序内，~~引入内建Threading库多线程功能，三个软件的备份、网盘上传和托盘图标分布在5个独立子线程中；将死循环和异常处理都移动到了各线程内部，保证持续运行；三个备份功能与上传功能之间均有1秒钟间隔（注：不能通过在控制台Ctrl+C结束程序，因为KeyboardInterrupt只能结束主线程，而所有功能都分布在不同的子线程中）~~（目前多线程版本有Bug，在主线程结束后子线程内无法捕获到PPT与Word实例，故没有添加至Release，可至仓库内OfficebackupMulti5.0 (Not in use).py查看；Release中的OfficebackupSingle5.0则是将所有函数放到死循环中顺序执行）<br>
 **·新增通过json文件修改配置功能（使用内建json库）**，支持自动创建与补全，替代了原先的硬编码方式；配置文件包括：备份路径、轮询间隔、功能开关、网盘API对接、托盘图标左键行为设置）<br>
-**·默认隐藏控制台窗口（使用内建ctypes库）**，不再需要vbs脚本隐藏，可以在配置文件内修改默认行为<br>
+**·默认隐藏控制台窗口（使用内建ctypes库）**，不再需要vbs脚本隐藏，可以在配置文件内修改默认行为（仅Win7、Win10可隐藏命令行窗口，Win11只能最小化到任务栏）<br>
 **·新增托盘图标（使用内建pystray库）**，右键图标能弹出菜单，可以隐藏/显示控制台窗口或退出程序<br>
+**·新增日志存储功能**，会在程序运行目录下创建latest.log（是纯文本文件，可用任意文本编辑器打开，如记事本），所有在命令行中print的内容将会通过log_file.write()方法自动写入文件保存，**每次启动程序都会自动删除同目录下已有的latest.log文件，如需保存请在程序重新运行前将旧的日志文件重命名或移动到其他目录**；同时**改进了日志输出逻辑**，将所有日志信息传入到新定义的log_print()函数中，**统一进行时间戳追加、写入.log文件等操作**<br>
 <br>
 <br>
 <br>
@@ -66,8 +67,6 @@ ws.run "OfficebackupSingle5.0.exe",vbhide
 保存退出，将文件后缀名由.txt改为.vbs，弹出提示框确认更改；最后与第3步一样，为VBS文件创建快捷方式，放到shell:startup文件夹内<br>
 此种方式若需要停止程序运行，只能到任务管理器中结束所有Python相关进程，不方便监控程序运行情况，请酌情使用<br>
 <br>
-<br>
-<br>
 **123云盘API对接方式：**<br>
 1.如果没有123云盘账号，访问https://www.123pan.cn/ 或 https://www.123pan.com/ ，使用手机号注册123云盘账号<br>
 2.登录云盘，点击页面右上角头像，进入个人中心<br>
@@ -82,12 +81,16 @@ ws.run "OfficebackupSingle5.0.exe",vbhide
 对接的产品或服务是否已上线：是/否均可<br>
 6.审核通过后（基本上是1分钟内秒过，不用等待很久），检查填写的邮箱，API密钥应该会发送到邮箱中<br>
 <br>
+<br>
+<br>
 **操作过程图片：**<br>
 <img width="563" height="379" alt="image" src="https://github.com/user-attachments/assets/15d63508-af87-4bd6-bf82-49d9074fd55e" />
 <img width="589" height="791" alt="image" src="https://github.com/user-attachments/assets/a2a80e9f-c111-45e1-84ca-196197462875" />
 <img width="1239" height="963" alt="image" src="https://github.com/user-attachments/assets/38a9449c-55ab-4aea-9fe9-9c372912c5ac" />
 <img width="730" height="1295" alt="image" src="https://github.com/user-attachments/assets/26fd34ac-dacf-4fff-890e-ed5d00a07ea8" />
 <img width="2125" height="601" alt="image" src="https://github.com/user-attachments/assets/b02263c2-5f5a-4ae4-b9bc-9da9e9cdf6c9" />
+<br>
+<br>
 <br>
 <br>
 <br>
@@ -158,9 +161,14 @@ ws.run "C:\pptbackup4.0.py",vbhide
 ·捕获进程部分的更改还原，PPT/Word仍然将使用Dispatch/DispatchEx('')，WPS继续使用GetObject(Class='')<br>
 ·为创建备份文件夹和开始备份操作增加了输出<br>
 <br>
-**2025-10-25（5.0预发布）** <br>
+**2025-09（5.0开始开发）** <br>
+**2025-10-25（5.0虚拟机测试通过）** <br>
 **·新增自动上传至网盘功能（使用第三方pan123库），目前支持123云盘**，可以自行修改相关源码以适配其他网盘<br>
 ·将PPT、Word、WPS三个软件的备份功能整合到单个程序内，~~引入内建Threading库多线程功能，三个软件的备份、网盘上传和托盘图标分布在5个独立子线程中；将死循环和异常处理都移动到了各线程内部，保证持续运行；三个备份功能与上传功能之间均有1秒钟间隔（注：不能通过在控制台Ctrl+C结束程序，因为KeyboardInterrupt只能结束主线程，而所有功能都分布在不同的子线程中）~~（目前多线程版本有Bug，在主线程结束后子线程内无法捕获到PPT与Word实例，故没有添加至Release，可至仓库内OfficebackupMulti5.0 (Not in use).py查看；Release中的OfficebackupSingle5.0则是将所有函数放到死循环中顺序执行）<br>
 **·新增通过json文件修改配置功能（使用内建json库）**，支持自动创建与补全，替代了原先的硬编码方式；配置文件包括：备份路径、轮询间隔、功能开关、网盘API对接、托盘图标左键行为设置）<br>
-**·默认隐藏控制台窗口（使用内建ctypes库）**，不再需要vbs脚本隐藏，可以在配置文件内修改默认行为<br>
+**·默认隐藏控制台窗口（使用内建ctypes库）**，不再需要vbs脚本隐藏，可以在配置文件内修改默认行为（仅Win7、Win10可隐藏命令行窗口，Win11只能最小化到任务栏）<br>
 **·新增托盘图标（使用内建pystray库）**，右键图标能弹出菜单，可以隐藏/显示控制台窗口或退出程序<br>
+**·新增日志存储功能**，会在程序运行目录下创建latest.log（是纯文本文件，可用任意文本编辑器打开，如记事本），所有在命令行中print的内容将会通过log_file.write()方法自动写入文件保存，**每次启动程序都会自动删除同目录下已有的latest.log文件，如需保存请在程序重新运行前将旧的日志文件重命名或移动到其他目录**；同时**改进了日志输出逻辑**，将所有日志信息传入到新定义的log_print()函数中，**统一进行时间戳追加、写入.log文件等操作**<br>
+**2025-10-31晚（5.0实装测试后改进）** <br>
+**2025-11-01凌晨（5.0发布）** <br>
+·修复了开机自启后程序无法第一时间联网获取云盘token、标记token_aquired=False时出现的逻辑问题，**确保在任何情况下token_aquired和acccess_token变量都有定义**，避免在上传函数内第二次获取token时出现变量未定义错误导致程序直接终止
