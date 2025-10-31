@@ -123,13 +123,14 @@ def request_access_token():   #定义获取access_token函数
             json.dump(config, f, indent=4, ensure_ascii=False)   #写入更新后的配置文件
             log_print('Access_token of 123Pan saved to json file successfully')   #打印保存access_token到配置文件成功的信息
     except Exception as e:
+        token_aquired=False   #标记token获取失败
         if config.get('access_token'):   #如果配置文件中已有access_token，则尝试使用该token
             access_token = config.get('access_token')  #尝试从配置文件中读取之前保存的access_token
             pan = Pan123(access_token)
             log_print('Failed to acquire access_token of 123Pan: ' + str(e) + ', temporarily use the token in json file, token request will continue after a while')   #打印使用配置文件中的token的信息
         else:
+            access_token = ""  #将access_token定义为空字符串
             log_print('Failed to acquire access_token of 123Pan: ' + str(e) + ', do not find token in json file either, token request will continue after a while')   #打印获取123云盘的access_token失败的信息
-            token_aquired=False   #标记token获取失败
 
 if config['upload_to_123pan_enable'] == True:   #如果上传功能开启，则获取access_token
     request_access_token()
@@ -367,7 +368,7 @@ def save_open_WPS_files(ppt_save_folder):   #定义WPS保存函数，参数ppt_s
 
 
 def upload_to_123pan():   #定义上传函数
-    global upload_queue, token_aquired  #声明全局上传队列变量
+    global upload_queue, token_aquired, access_token  #声明全局上传队列变量
     if not token_aquired:   #如果token获取失败，则尝试重新获取
         request_access_token()
         if not token_aquired and not access_token:   #如果token获取仍然失败且配置文件中没有access_token，则等待一段时间后重试
