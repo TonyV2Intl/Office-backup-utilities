@@ -29,12 +29,13 @@ default_config = {
     "ppt_backup_enable": True,   #PPT备份功能
     "word_backup_enable": True,   #Word备份功能
     "wps_backup_enable": True,   #WPS备份功能
-    "upload_to_123pan_enable": True,   #上传到123云盘功能
-    #123云盘参数
-    "client_id": "",   #123云盘API用户ID
-    "client_secret": "",   #123云盘API用户密钥
-    "access_token": "",   #123云盘访问令牌，程序会自动获取并写入
-    "folder_id": 0,   #目标文件夹ID，可以从浏览器地址栏获取，根目录用0表示
+    "upload_to_ftp_enable": True,   #上传到FTP服务器功能
+    #FTP服务器参数
+    "ftp_host": "",   #FTP服务器地址（FRP穿透后的公网地址）
+    "ftp_port": 21,   #FTP服务器端口（FRP映射的端口）
+    "ftp_username": "",   #FTP用户名
+    "ftp_password": "",   #FTP密码
+    "ftp_target_path": "",   #FTP目标路径（NAS上的路径）
     #文件夹精确备份功能
     "accurate_backup_enable": False,
     "accurate_backup_source_path": "",
@@ -90,50 +91,21 @@ sleeptime=config.get('interval')   #轮询间隔（默认为60秒）
 max_skipping_time=config.get('max_skipping_time')   #连续跳过次数（默认为15次）
 ppt_save_folder=config.get('ppt_backup_path')   #ppt备份路径
 word_save_folder=config.get('word_backup_path')   #word备份路径
-if config.get('upload_to_123pan_enable'):   #如果上传功能开启，则读取相关参数
-    client_id = config.get('client_id')  # 123云盘用户ID
-    client_secret = config.get('client_secret')  # 123云盘用户密钥
-    folder_id = config.get('folder_id')  # 123云盘目标文件夹ID
-'''behavior = config.get('tray_left_click_behavior')  # 托盘图标左键点击行为（默认为打开控制台）（无法生效）'''
 
+#FTP相关配置
+ftp_enable = config.get('upload_to_ftp_enable')
+ftp_host = config.get('ftp_host')
+ftp_port = config.get('ftp_port')
+ftp_username = config.get('ftp_username')
+ftp_password = config.get('ftp_password')
+ftp_target_path = config.get('ftp_target_path')
 
-
-try:   #尝试导入pan123库
-    from pan123.auth import get_access_token   #导入pan123.auth库，用于获取123云盘的access_token
-    from pan123 import Pan123   #导入pan123库，用于与123云盘交互
-except ImportError:
-    log_print("pan123 not found, force disabled upload function")
-    config['upload_to_123pan_enable'] = False   #强制禁用上传功能
-
-if not client_id or not client_secret:   #检查client_id和client_secret是否为空，若为空则强制禁用上传功能
-    log_print("Client ID or Client Secret is empty, force disabled upload function, please provide valid credentials in the configuration file")
-    config['upload_to_123pan_enable'] = False   #强制禁用上传功能
-
-def request_access_token():   #定义获取access_token函数
-    global access_token, pan, token_aquired   #声明全局变量access_token和pan，以便在函数内修改其值
-    try:   #尝试获取123云盘的access_token
-        access_token = get_access_token(client_id, client_secret)
-        pan = Pan123(access_token)
-        log_print('Access_token of 123Pan acquired successfully')   #打印获取123云盘的access_token成功的信息
-
-        token_aquired=True   #标记token获取成功
-
-        with open('OfficebackupSingleConfig.json', 'w', encoding='utf-8') as f:   #将access_token写入配置文件
-            config['access_token'] = access_token   #更新配置字典中的access_token
-            json.dump(config, f, indent=4, ensure_ascii=False)   #写入更新后的配置文件
-            log_print('Access_token of 123Pan saved to json file successfully')   #打印保存access_token到配置文件成功的信息
-    except Exception as e:
-        token_aquired=False   #标记token获取失败
-        if config.get('access_token'):   #如果配置文件中已有access_token，则尝试使用该token
-            access_token = config.get('access_token')  #尝试从配置文件中读取之前保存的access_token
-            pan = Pan123(access_token)
-            log_print('Failed to acquire access_token of 123Pan: ' + str(e) + ', temporarily use the token in json file, token request will continue after a while')   #打印使用配置文件中的token的信息
-        else:
-            access_token = ""  #将access_token定义为空字符串
-            log_print('Failed to acquire access_token of 123Pan: ' + str(e) + ', do not find token in json file either, token request will continue after a while')   #打印获取123云盘的access_token失败的信息
-
-if config['upload_to_123pan_enable'] == True:   #如果上传功能开启，则获取access_token
-    request_access_token()
+#检查FTP配置是否完整
+if ftp_enable:
+    if not ftp_host or not ftp_username or not ftp_password:
+        log_print("FTP configuration is incomplete, force disabled upload function, please provide valid credentials in the configuration file")
+        config['upload_to_ftp_enable'] = False
+        ftp_enable = False
 
 if config.get('accurate_backup_enable'):  # 检查精确备份功能是否启用
     source_path = config.get('accurate_backup_source_path')   #获取源文件夹路径
@@ -367,37 +339,160 @@ def save_open_WPS_files(ppt_save_folder):   #定义WPS保存函数，参数ppt_s
 
 
 
-def upload_to_123pan():   #定义上传函数
-    global upload_queue, token_aquired, access_token  #声明全局上传队列变量
-    if not token_aquired:   #如果token获取失败，则尝试重新获取
-        request_access_token()
-        if not token_aquired and not access_token:   #如果token获取仍然失败且配置文件中没有access_token，则等待一段时间后重试
-            return   #跳过本次上传操作，继续下一轮循环
+def upload_to_ftp():   #定义FTP上传函数
+    import ftplib  #导入ftplib库，用于FTP操作
+    global upload_queue  #声明全局上传队列变量
+    
+    if not ftp_enable:  #如果FTP功能未启用，则返回
+        return
+        
+    # 自定义FTP类，修复PASV响应中的IP地址并验证被动端口范围
+    class FixedPASVFTP(ftplib.FTP):
+        def __init__(self, host, *args, passive_port_range=None, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.real_host = host  # 保存真实的公网IP
+            self.passive_port_range = passive_port_range  # 被动端口范围
+        
+        def makepasv(self):
+            """
+            重写makepasv方法，解析PASV响应并替换IP地址，验证被动端口范围
+            - 将本地IP地址替换为公网IP
+            - 验证被动端口是否在指定范围内
+            """
+            # 发送PASV命令并获取响应
+            response = self.sendcmd('PASV')
+            log_print(f"DEBUG: PASV response: {response}")
+            
+            # 手动解析PASV响应
+            import re
+            match = re.search(r'227.*?\((\d+),(\d+),(\d+),(\d+),(\d+),(\d+)\)', response)
+            if not match:
+                raise ftplib.error_reply(response)
+            
+            # 提取原始IP和端口
+            h1, h2, h3, h4, p1, p2 = map(int, match.groups())
+            original_host = f"{h1}.{h2}.{h3}.{h4}"
+            final_port = p1 * 256 + p2
+            
+            log_print(f"DEBUG: Original PASV info: host={original_host}, port={final_port}")
+            
+            # 验证被动端口是否在指定范围内（55752-55753）
+            passive_port_range = range(55752, 55753)
+            if final_port < passive_port_range.start or final_port > passive_port_range.stop - 1:
+                log_print(f"WARNING: PASV port {final_port} is not in expected range {passive_port_range}")
+            else:
+                log_print(f"DEBUG: PASV port {final_port} is within expected range {passive_port_range}")
+            
+            # 替换本地IP为真实公网IP
+            if original_host in ('127.0.0.1', 'localhost', '0.0.0.0'):
+                final_host = self.real_host
+                log_print(f"DEBUG: Replaced PASV IP: {original_host} -> {final_host}")
+            else:
+                final_host = original_host
+                log_print(f"DEBUG: Using original PASV IP: {final_host}")
+            
+            return final_host, final_port
+        
     while upload_queue:  #当上传队列不为空时
-        for (upload_file, upload_source_path) in upload_queue:
-            log_print('Start to upload ' + upload_file + ' to 123Pan')   #打印上传开始信息
+        # 使用列表副本遍历，避免在遍历过程中修改列表
+        for (upload_file, upload_source_path) in list(upload_queue):
+            log_print('Start to upload ' + upload_file + ' to FTP server')   #打印上传开始信息
             upload_start_time=datetime.datetime.now()   #记录上传操作开始时间
+            
             try:
-                response = pan.file.list(parent_file_id=folder_id, search_data=upload_file, search_mode=1, limit=1)   #尝试在云盘内精确搜索文件，检查文件是否已经上传，限制返回1个结果
-                file_id = response.get("lastFileId", [])   #获取文件列表
-                if file_id != -1:   #如果找到了匹配的文件（不是返回-1），则进行删除操作
-                    pan.file.trash([file_id])  #移到回收站
-                    log_print('Existing file in 123Pan deleted successfully: ' + upload_file + ' (File_ID: ' + str(file_id) + ')')
-                else:
-                    log_print('No matching file found in 123Pan: ' + upload_file + ', skip delete operation')
+                # 连接FTP服务器
+                ftp = FixedPASVFTP(ftp_host)
+                ftp.connect(ftp_host, ftp_port, timeout=60)  # 增加超时时间
+                ftp.login(ftp_username, ftp_password)
+                log_print('Successfully connected to FTP server')
+                
+                # 使用被动模式
+                ftp.set_pasv(True)
+                log_print('FTP passive mode enabled')
+                
+                # 切换到目标目录
+                if ftp_target_path:
+                    try:
+                        ftp.cwd(ftp_target_path)
+                        log_print('Successfully changed to target directory: ' + ftp_target_path)
+                    except ftplib.error_perm as e:
+                        log_print(f'Failed to change directory to {ftp_target_path}: {e}, creating directory...')
+                        # 如果目录不存在则创建
+                        dirs = ftp_target_path.split('/')
+                        current_dir = ''
+                        for dir in dirs:
+                            if dir:
+                                current_dir += '/' + dir
+                                try:
+                                    ftp.cwd(current_dir)
+                                except ftplib.error_perm:
+                                    ftp.mkd(current_dir)
+                                    ftp.cwd(current_dir)
+                        log_print('Successfully created target directory: ' + ftp_target_path)
+                
+                # 检查文件是否已存在
+                try:
+                    ftp.size(upload_file)  #尝试获取文件大小，如果成功则文件存在
+                    log_print('File already exists on FTP server: ' + upload_file + ', deleting...')
+                    ftp.delete(upload_file)  #删除已存在的文件
+                    log_print('Successfully deleted existing file: ' + upload_file)
+                except ftplib.error_perm:
+                    log_print('No existing file found on FTP server: ' + upload_file + ', proceeding with upload')
+                
+                # 上传文件
+                with open(upload_source_path, 'rb') as f:
+                    try:
+                        # 设置底层套接字超时时间
+                        ftp.sock.settimeout(30)  # 设置30秒超时
+                        try:
+                            ftp.storbinary('STOR ' + upload_file, f)
+                            log_print('Upload to FTP server successfully: ' + upload_file)
+                        except (TimeoutError, ConnectionResetError, ftplib.error_temp) as e:
+                            # 捕获超时等临时错误，需要重新连接检查
+                            log_print('⚠ File upload timed out, attempting to reconnect and check...')
+                            log_print(f'Error: {e}')
+                            # 关闭当前连接（对于超时情况，直接关闭socket而不是发送QUIT命令）
+                            try:
+                                ftp.quit()
+                            except Exception as quit_error:
+                                log_print(f"   WARNING: Failed to quit cleanly, closing socket directly: {quit_error}")
+                                # 直接关闭socket
+                                try:
+                                    ftp.sock.close()
+                                except Exception as close_error:
+                                    log_print(f"   WARNING: Failed to close socket: {close_error}")
+                            
+                            # 重新建立FTP连接
+                            log_print("   Reconnecting to FTP server...")
+                            ftp = FixedPASVFTP(ftp_host)
+                            ftp.connect(ftp_host, ftp_port, timeout=60)
+                            ftp.login(ftp_username, ftp_password)
+                            log_print("   ✓ Reconnected to FTP server")
+                            
+                            # 重新切换到目标目录
+                            if ftp_target_path:
+                                ftp.cwd(ftp_target_path)
+                                log_print(f"   ✓ Changed to directory: {ftp_target_path}")
+                            
+                            # 检查文件是否实际已上传
+                            try:
+                                file_size = ftp.size(upload_file)
+                                log_print(f'✓ File actually exists on server, size: {file_size} bytes')
+                            except ftplib.error_perm:
+                                log_print('✗ File not found on server after timeout')
+                    except Exception as e:
+                        log_print(f'⚠ Unexpected error during upload: {e}')
+                # 关闭FTP连接
+                ftp.quit()
+                
             except Exception as e:
-                log_print('Delete operation failed: ' + str(e) + ', upload will continue')
-
-            try:
-                pan.file.upload(parent_file_id=folder_id, file_path=upload_source_path)   #上传当前文件到123云盘
-                log_print('Upload to 123Pan successfully: ' + upload_file)
-            except Exception as e:
-                log_print('Upload to 123Pan failed: ' + str(e))
+                log_print('FTP upload failed: ' + str(e))
+            
             upload_end_time=datetime.datetime.now()   #记录上传操作结束时间
             upload_used_time=upload_end_time-upload_start_time   #计算上传所用时间
-            log_print('Upload to 123Pan finished: ' + upload_file + ' in ' + str(upload_used_time) + ' s')
+            log_print('FTP upload finished: ' + upload_file + ' in ' + str(upload_used_time) + ' s')
             upload_queue.remove((upload_file, upload_source_path))   #从上传队列中移除已处理的文件
-    log_print('Upload queue has been cleared')
+    log_print('FTP upload queue has been cleared')
 
 
 
@@ -464,8 +559,8 @@ while True:   #主线程无限循环，防止程序退出
         save_open_word_files(word_save_folder)   #启动线程
     if config.get('wps_backup_enable'):   #检查WPS备份功能是否启用
         save_open_WPS_files(ppt_save_folder)   #启动线程
-    if config.get('upload_to_123pan_enable'):   #检查上传到123云盘功能是否启用
-        upload_to_123pan()   #启动线程
+    if config.get('upload_to_ftp_enable'):   #检查上传到FTP服务器功能是否启用
+        upload_to_ftp()   #启动线程
     if config.get('accurate_backup_enable'):  # 检查精确备份功能是否启用
         accurate_backup()  # 启动线程
     time.sleep(sleeptime)   #等待指定时间后继续轮询
