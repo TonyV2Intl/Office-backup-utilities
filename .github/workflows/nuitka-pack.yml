@@ -4,12 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       programs:
-        description: 'Programs to package (comma-separated list, e.g., OfficebackupSingle5.1.py,Oficebackup5.1Core.py)'
+        description: 'Programs to package (comma-separated list, e.g. :OfficebackupSingle5.1.py,Officebackup5.1Core.py)'
         required: true
       version:
-        description: 'Version number to use for the build (e.g., 5.1)'
+        description: 'Version number to use for the build (e.g.: 5.1)'
         required: true
-        default: '5.1'
 
 jobs:
   build:
@@ -41,7 +40,7 @@ jobs:
         foreach ($program in $programs) {
           if (Test-Path $program) {
             Write-Host "Packaging $program with version $version..."
-            python -m nuitka --standalone --follow-imports --python-flag="-S" --main="$program" --remove-output --windows-icon-from-ico="PythonLight.ico" --file-version="$version" --product-name="Office-Backup-Utilities" --company-name="TonyV2Intl" --product-version="$version" --copyright="Copyright (C) 2026 TonyV2Intl" --onefile --include-data-files="./PythonLight.ico=./PythonLight.ico" --msvc=14.0 --noinclude-win32ui-lib
+            python -m nuitka --standalone --follow-imports --python-flag="-S" --main="$program" --remove-output --windows-icon-from-ico="PythonLight.ico" --file-version="$version" --product-name="Office-Backup-Utilities" --company-name="TonyV2Intl" --product-version="$version" --copyright="Copyright (C) 2026 TonyV2Intl" --onefile --include-data-files="./PythonLight.ico=./PythonLight.ico" --msvc=14.0
           } else {
             Write-Warning "File $program not found, skipping..."
           }
