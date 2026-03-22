@@ -45,14 +45,14 @@ default_config = {
     "save_log": True   #是否保存日志到latest.log文件，True为保存（默认），False为不保存
 }
 try:   #读取配置文件
-    with open('OfficebackupSingleConfig.json', 'r', encoding='utf-8') as f:   #尝试读取配置文件（只读）
+    with open('Officebackup.json', 'r', encoding='utf-8') as f:   #尝试读取配置文件（只读）
         config = json.load(f)
     for key, value in default_config.items():   #如果现有配置文件有缺漏，根据默认配置项自动补全
         if key not in config:
             config[key] = value
 except (FileNotFoundError, json.JSONDecodeError):   #若配置文件不存在或无法解析
     config = default_config   #使用默认配置
-    with open('OfficebackupSingleConfig.json', 'w', encoding='utf-8') as f:   #在当前目录下根据默认配置文件创建（写入）
+    with open('Officebackup.json', 'w', encoding='utf-8') as f:   #在当前目录下根据默认配置文件创建（写入）
         json.dump(config, f, indent=4, ensure_ascii=False)   #写入默认配置文件
 
 

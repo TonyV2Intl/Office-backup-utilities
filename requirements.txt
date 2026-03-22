@@ -1,3 +1,5 @@
 Pillow
 pystray
 pywin32
+alist3
+123pan
