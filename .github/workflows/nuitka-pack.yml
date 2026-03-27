@@ -7,11 +7,15 @@ on:
   workflow_dispatch:
     inputs:
       programs:
-        description: 'Programs to package (comma-separated list, e.g. :OfficebackupSingle5.1.py,Officebackup5.1Core.py)'
+        description: 'Programs to package (comma-separated list, e.g. OfficebackupSingle5.1.py,Officebackup5.1Core.py)'
         required: true
       version:
-        description: 'Version number to use for the build (e.g.: 5.1)'
+        description: 'Version number to use for the build (e.g., 5.1)'
         required: true
+        default: '5.1'
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
@@ -72,21 +76,3 @@ jobs:
         path: |
           *.exe
           *.zip
-    
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: v${{ github.event.inputs.version }}
-        release_name: Release v${{ github.event.inputs.version }}
-        draft: false
-        prerelease: false
-    
-    - name: Upload Release Assets
-      uses: AButler/upload-release-assets@v3.0
-      with:
-        files: "*.exe"
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
-        release-tag: v${{ github.event.inputs.version }}
