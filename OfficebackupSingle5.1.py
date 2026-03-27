@@ -436,7 +436,18 @@ def on_clicked(icon):   #左键单击事件处理（无法生效）
         exit_program(icon)
 '''
 try:   #尝试加载图标文件
-    image = Image.open('PythonLight.ico')   #图标文件路径
+    # 检查当前目录是否有图标文件
+    if os.path.exists('PythonLight.ico'):
+        image = Image.open('PythonLight.ico')   #图标文件路径
+    else:
+        # 尝试在程序所在目录查找图标文件
+        program_dir = os.path.dirname(os.path.abspath(__file__))
+        icon_path = os.path.join(program_dir, 'PythonLight.ico')
+        if os.path.exists(icon_path):
+            image = Image.open(icon_path)
+        else:
+            # 图标文件不存在，使用默认图标
+            raise FileNotFoundError()
 except FileNotFoundError:
     log_print('Icon file not found, using a white cube as default icon')
     image = Image.new('RGB', (64, 64), color=(255, 255, 255))   #创建一个简单的白色方块作为默认图标
