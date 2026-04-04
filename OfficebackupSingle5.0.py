@@ -41,7 +41,7 @@ default_config = {
     "accurate_backup_target_path": "",
     #托盘图标、控制台行为与日志保存设置
     #"tray_left_click_behavior": "open_console",   #托盘图标左键点击行为，选项有"open_console"（打开控制台）和"exit_program"（退出程序）（无法生效）
-    "show_console_window_at startup": False,   #程序启动时显示控制台窗口，True为显示，False为隐藏（默认）
+    "show_console_window_at_startup": False,   #程序启动时显示控制台窗口，True为显示，False为隐藏（默认）
     "save_log": True   #是否保存日志到latest.log文件，True为保存（默认），False为不保存
 }
 try:   #读取配置文件
