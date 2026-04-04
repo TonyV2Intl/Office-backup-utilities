@@ -5,14 +5,8 @@ import win32com.client as win32   #导入win32com.client库，用于通过COM接
 import datetime   #导入datetime库，用于计算备份所用时间
 from collections import defaultdict  #导入collections库的defaultdict方法，用于跟踪单个文件的跳过次数
 
-import threading  #导入threading库，用于多线程操作
 import json  #导入json库，用于处理配置文件的读写
-
-import pystray   #导入pystray库，用于创建系统托盘图标
-from pystray import MenuItem as item   #从pystray库中导入MenuItem类，用于创建托盘菜单项
-from PIL import Image   #导入PIL库的Image模块，用于处理图标图像
 import ctypes   #导入ctypes库，用于调用Windows API函数
-
 
 
 
@@ -32,9 +26,7 @@ default_config = {
     "accurate_backup_enable": False,
     "accurate_backup_source_path": "",
     "accurate_backup_target_path": "",
-    #托盘图标、控制台行为与日志保存设置
-    #"tray_left_click_behavior": "open_console",   #托盘图标左键点击行为，选项有"open_console"（打开控制台）和"exit_program"（退出程序）（无法生效）
-    "show_console_window_at startup": False,   #程序启动时显示控制台窗口，True为显示，False为隐藏（默认）
+    #日志保存设置
     "save_log": True   #是否保存日志到latest.log文件，True为保存（默认），False为不保存
 }
 try:   #读取配置文件
@@ -65,10 +57,9 @@ def log_print(msg):   #定义日志打印函数
 
 
 
-console_visible = config.get('show_console_window_at startup')   #获取控制台窗口初始状态参数（默认为隐藏）
+# 默认隐藏控制台窗口
 console_window = ctypes.windll.kernel32.GetConsoleWindow()   #获取控制台窗口句柄
-if not console_visible:
-    ctypes.windll.user32.ShowWindow(console_window, 0)   #隐藏控制台窗口
+ctypes.windll.user32.ShowWindow(console_window, 0)   #隐藏控制台窗口
 
 
 
@@ -82,8 +73,6 @@ sleeptime=config.get('interval')   #轮询间隔（默认为60秒）
 max_skipping_time=config.get('max_skipping_time')   #连续跳过次数（默认为15次）
 ppt_save_folder=config.get('ppt_backup_path')   #ppt备份路径
 word_save_folder=config.get('word_backup_path')   #word备份路径
-'''behavior = config.get('tray_left_click_behavior')  # 托盘图标左键点击行为（默认为打开控制台）（无法生效）'''
-
 
 
 
@@ -95,7 +84,6 @@ if config.get('accurate_backup_enable'):  # 检查精确备份功能是否启用
         with open('OBU5.1Core.json', 'w', encoding='utf-8') as f:   #将禁用精确备份功能写入配置文件
                 config['accurate_backup_enable'] = False   #强制禁用精确备份功能
                 json.dump(config, f, indent=4, ensure_ascii=False)   #写入更新后的配置文件
-
 
 
 
@@ -328,45 +316,6 @@ def accurate_backup():   #定义精确备份函数
 
 
 
-def toggle_console():   #切换控制台窗口的显示/隐藏状态
-    global console_visible   #声明全局变量console_visible，以便在函数内修改其值
-    console_window = ctypes.windll.kernel32.GetConsoleWindow()   #获取控制台窗口句柄
-    if console_visible:   #隐藏控制台窗口
-        ctypes.windll.user32.ShowWindow(console_window, 0)   #隐藏控制台窗口
-        console_visible = False
-    else:   #显示控制台窗口
-        ctypes.windll.user32.ShowWindow(console_window, 1)  # SW_SHOWNORMAL
-        console_visible = True
-
-def exit_program(icon):   #退出程序
-    icon.stop()
-    os._exit(0)
-'''def on_clicked(icon):   #左键单击事件处理（无法生效）
-    global behavior   #声明全局变量behavior，以便在函数内修改其值
-    if behavior == 'open_console':   #切换控制台窗口显示/隐藏状态
-        toggle_console()
-    elif behavior == 'exit_program':   #退出程序
-        exit_program(icon)
-'''
-try:   #尝试加载图标文件
-    image = Image.open('PythonLight.ico')   #图标文件路径
-except FileNotFoundError:
-    log_print('Icon file not found, using a white cube as default icon')
-    image = Image.new('RGB', (64, 64), color=(255, 255, 255))   #创建一个简单的白色方块作为默认图标
-
-menu = (item('Show/Hide console window', toggle_console), item('Exit program', exit_program))   #创建右键菜单
-
-icon = pystray.Icon("office_backup_utilities", image, "Office Backup Utilities", menu)   #创建托盘图标对象
-'''icon.on_left_click = on_clicked   #绑定左键单击事件处理函数（无法生效）'''
-
-
-
-
-
-
-icon_task = threading.Thread(target=icon.run)   #创建托盘图标线程
-icon_task.daemon = True   #设置为守护线程（随主程序终止而自动结束）
-icon_task.start()   #启动托盘图标线程
 
 while True:   #主线程无限循环，防止程序退出
     if config.get('ppt_backup_enable'):   #检查PPT备份功能是否启用
