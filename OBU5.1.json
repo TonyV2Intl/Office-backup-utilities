@@ -1,5 +1,5 @@
 {
-    "ppt_backup_path": "C:\\Officebackup\\pptbckup",
+    "ppt_backup_path": "C:\\Officebackup\\pptbackup",
     "word_backup_path": "C:\\Officebackup\\wordbackup",
     "interval": 5,
     "max_skipping_time": 5,
@@ -10,7 +10,7 @@
     "openlist_url": "https://openlist.tonyv2.top",
     "openlist_username": "Tony_V2",
     "openlist_password": "Tony090721",
-    "openlist_target_folder": "/阿里云盘/课件备份 高二",
+    "openlist_target_folder": "/课件备份 高二",
     "accurate_backup_enable": false,
     "accurate_backup_source_path": "",
     "accurate_backup_target_path": "",
