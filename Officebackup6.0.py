@@ -530,8 +530,18 @@ def on_clicked(icon):   #左键单击事件处理（无法生效）
     elif behavior == 'exit_program':   #退出程序
         exit_program(icon)
 '''
+import sys
+
 try:   #尝试加载图标文件
-    image = Image.open('PythonLight.ico')   #图标文件路径
+    # 检查是否在Nuitka打包环境中
+    if hasattr(sys, '_MEIPASS'):
+        # 在Nuitka打包环境中，使用临时解压目录
+        icon_path = os.path.join(sys._MEIPASS, 'PythonLight.ico')
+    else:
+        # 在正常环境中，使用相对路径
+        icon_path = 'PythonLight.ico'
+    
+    image = Image.open(icon_path)   #图标文件路径
 except FileNotFoundError:
     log_print('Icon file not found, using a white cube as default icon')
     image = Image.new('RGB', (64, 64), color=(255, 255, 255))   #创建一个简单的白色方块作为默认图标
