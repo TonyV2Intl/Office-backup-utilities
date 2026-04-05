@@ -30,14 +30,14 @@ default_config = {
     "save_log": True   #是否保存日志到latest.log文件，True为保存（默认），False为不保存
 }
 try:   #读取配置文件
-    with open('OBU5.1Core.json', 'r', encoding='utf-8') as f:   #尝试读取配置文件（只读）
+    with open('OBU6.0Core.json', 'r', encoding='utf-8') as f:   #尝试读取配置文件（只读）
         config = json.load(f)
     for key, value in default_config.items():   #如果现有配置文件有缺漏，根据默认配置项自动补全
         if key not in config:
             config[key] = value
 except (FileNotFoundError, json.JSONDecodeError):   #若配置文件不存在或无法解析
     config = default_config   #使用默认配置
-    with open('OBU5.1Core.json', 'w', encoding='utf-8') as f:   #在当前目录下根据默认配置文件创建（写入）
+    with open('OBU6.0Core.json', 'w', encoding='utf-8') as f:   #在当前目录下根据默认配置文件创建（写入）
         json.dump(config, f, indent=4, ensure_ascii=False)   #写入默认配置文件
 
 
@@ -81,7 +81,7 @@ if config.get('accurate_backup_enable'):  # 检查精确备份功能是否启用
     target_path = config.get('accurate_backup_target_path')   #获取目标文件夹路径
     if not source_path and target_path:   #如果精确备份功能开启但源路径为空或目标路径为空，则强制禁用精确备份功能
         log_print("Source path or target path for accurate backup is empty, force disabled accurate backup function, please provide valid paths in the configuration file")
-        with open('OBU5.1Core.json', 'w', encoding='utf-8') as f:   #将禁用精确备份功能写入配置文件
+        with open('OBU6.0Core.json', 'w', encoding='utf-8') as f:   #将禁用精确备份功能写入配置文件
                 config['accurate_backup_enable'] = False   #强制禁用精确备份功能
                 json.dump(config, f, indent=4, ensure_ascii=False)   #写入更新后的配置文件
 
