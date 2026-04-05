@@ -4,6 +4,7 @@ import time   #导入time模块，用于时间相关操作
 import win32com.client as win32   #导入win32com.client库，用于通过COM接口与Microsoft Office应用程序交互
 import datetime   #导入datetime库，用于计算备份所用时间
 from collections import defaultdict  #导入collections库的defaultdict方法，用于跟踪单个文件的跳过次数
+import requests   #导入requests库，用于HTTP请求
 
 import threading  #导入threading库，用于多线程操作
 import json  #导入json库，用于处理配置文件的读写
@@ -95,8 +96,7 @@ word_save_folder=config.get('word_backup_path')   #word备份路径
 
 
 try:   #尝试导入AList3SDK
-    import asyncio
-    from alist import AList, AListUser   #导入AList3SDK，用于与OpenList/AList服务交互
+    from alist import AList, AListUser   #导入AList3SDK，用于与OpenList/AList服务交互（1.3.1版本默认是同步API）
 except ImportError:
     log_print("alist3 not found, force disabled upload function")
     config['upload_to_openlist_enable'] = False   #强制禁用上传功能
@@ -348,53 +348,104 @@ def upload_to_openlist():   #定义上传函数
     if not config.get('upload_to_openlist_enable'):   #检查上传功能是否启用
         return   #如果未启用，直接返回
     
-    async def async_upload():
-        while upload_queue:  #当上传队列不为空时
-            for (upload_file, upload_source_path) in list(upload_queue):  #使用list()创建副本，避免在迭代时修改列表
-                log_print('Start to upload ' + upload_file + ' to OpenList')   #打印上传开始信息
-                upload_start_time=datetime.datetime.now()   #记录上传操作开始时间
-                
-                try:
-                    # 初始化AList客户端和用户
+    # 直接在主线程中执行同步上传（使用alist3 1.3.1版本的异步API）
+    while upload_queue:
+        # 复制队列以避免在迭代时修改
+        current_queue = list(upload_queue)
+        for (upload_file, upload_source_path) in current_queue:
+            log_print('Start to upload ' + upload_file + ' to OpenList')   #打印上传开始信息
+            upload_start_time=datetime.datetime.now()   #记录上传操作开始时间
+            
+            try:
+                # 定义异步上传函数
+                async def async_upload():
+                    # 初始化AList客户端和用户（使用异步API）
+                    from alist import AListAsync
                     user = AListUser(openlist_username, openlist_password)
-                    client = AList(openlist_url)
-                    
-                    # 登录
-                    await client.login(user)
+                    client = AListAsync(openlist_url)
+                    upload_result = False
                     
                     # 构造目标文件路径
                     target_file_path = os.path.join(openlist_target_folder, upload_file).replace(os.sep, '/')
                     
                     # 检查目标文件夹是否存在，不存在则创建
                     target_folder = os.path.dirname(target_file_path).replace(os.sep, '/')
+                    
+                    # 登录
+                    login_result = await client.login(user)
+                    if login_result:
+                        log_print('Login to OpenList successfully')
+                    else:
+                        log_print('Login to OpenList failed')
+                        return False
+                    
+                    # 创建目标文件夹
                     if target_folder and target_folder != '/':
-                        # AList3SDK使用mkdir方法创建目录
-                        await client.mkdir(target_folder)
+                        try:
+                            await client.mkdir(target_folder)
+                            log_print('Created target folder: ' + target_folder)
+                        except Exception as e:
+                            log_print('Failed to create target folder: ' + str(e))
                     
                     # 检查文件是否已存在，存在则删除
                     try:
-                        # AList3SDK使用remove方法删除文件
                         await client.remove(target_file_path)
                         log_print('Existing file in OpenList deleted successfully: ' + upload_file)
                     except Exception as e:
                         log_print('No matching file found in OpenList or delete failed: ' + str(e) + ', upload will continue')
                     
                     # 上传文件
-                    # AList3SDK使用upload_file方法上传文件
-                    await client.upload(target_file_path, upload_source_path)
-                    log_print('Upload to OpenList successfully: ' + upload_file)
+                    log_print('Starting file upload: ' + upload_file)
+                    log_print('Local file path: ' + upload_source_path)
+                    log_print('Target file path: ' + target_file_path)
+                    log_print('File size: ' + str(os.path.getsize(upload_source_path)) + ' bytes')
                     
-                except Exception as e:
-                    log_print('Upload to OpenList failed: ' + str(e))
+                    # 使用 client.upload 方法，添加错误处理
+                    try:
+                        upload_result = await client.upload(target_file_path, upload_source_path)
+                        if upload_result:
+                            log_print('Upload to OpenList successfully: ' + upload_file)
+                        else:
+                            log_print('Upload to OpenList failed')
+                    except Exception as e:
+                        log_print('Upload failed with error: ' + str(e))
+                        # 检查是否是 504 超时错误
+                        if '504' in str(e) or 'timeout' in str(e).lower():
+                            log_print('Server timeout error, will retry in next cycle')
+                        else:
+                            log_print('Upload failed, will retry in next cycle')
+                    
+                    return upload_result
                 
+                # 运行异步上传函数
+                import asyncio
+                upload_result = asyncio.run(async_upload())
+                
+                # 检查上传是否成功
+                if not upload_result:
+                    # 上传失败，不移除文件，让它在下次循环中重新尝试
+                    upload_end_time=datetime.datetime.now()   #记录上传操作结束时间
+                    upload_used_time=upload_end_time-upload_start_time   #计算上传所用时间
+                    log_print('Upload to OpenList failed: ' + upload_file + ' in ' + str(upload_used_time) + ' s, will retry in next cycle')
+                    continue
+                
+            except Exception as e:
+                log_print('Upload to OpenList failed: ' + str(e))
+                import traceback
+                log_print('Traceback: ' + traceback.format_exc())
+                # 发生错误时，不移除文件，让它在下次循环中重新尝试
                 upload_end_time=datetime.datetime.now()   #记录上传操作结束时间
                 upload_used_time=upload_end_time-upload_start_time   #计算上传所用时间
-                log_print('Upload to OpenList finished: ' + upload_file + ' in ' + str(upload_used_time) + ' s')
-                upload_queue.remove((upload_file, upload_source_path))   #从上传队列中移除已处理的文件
-        log_print('Upload queue has been cleared')
-    
-    # 运行异步上传函数
-    asyncio.run(async_upload())
+                log_print('Upload to OpenList failed: ' + upload_file + ' in ' + str(upload_used_time) + ' s, will retry in next cycle')
+                continue
+            
+            upload_end_time=datetime.datetime.now()   #记录上传操作结束时间
+            upload_used_time=upload_end_time-upload_start_time   #计算上传所用时间
+            log_print('Upload to OpenList finished: ' + upload_file + ' in ' + str(upload_used_time) + ' s')
+            # 从队列中移除已处理的文件
+            if (upload_file, upload_source_path) in upload_queue:
+                upload_queue.remove((upload_file, upload_source_path))
+    log_print('Upload queue has been cleared')
 
 
 
