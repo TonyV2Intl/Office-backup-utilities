@@ -3,3 +3,6 @@ __pycache__
 *.txt
 *.exe
 *.json
+!OfficebackupSingleConfig-example.json
+!OBU6.0-example.json
+!OBU6.0Core-example.json

@@ -23,13 +23,13 @@ class ConfigEditor:
                 "cloud_section": "123云盘参数",
                 "cloud_params": ["client_id", "client_secret", "access_token", "folder_id"]
             },
-            "5.1": {
-                "config_file": "OBU5.1.json",
+            "6.0": {
+                "config_file": "OBU6.0.json",
                 "cloud_section": "OpenList参数",
                 "cloud_params": ["openlist_url", "openlist_username", "openlist_password", "openlist_target_folder"]
             },
-            "5.1Core": {
-                "config_file": "OBU5.1Core.json",
+            "6.0Core": {
+                "config_file": "OBU6.0Core.json",
                 "cloud_section": None,
                 "cloud_params": []
             }
@@ -79,7 +79,7 @@ class ConfigEditor:
         version_combobox = ttk.Combobox(
             version_frame, 
             textvariable=self.version_var, 
-            values=["", "5.0", "5.1", "5.1Core"],
+            values=["", "5.0", "6.0", "6.0Core"],
             state="readonly",
             width=10,
             takefocus=False
@@ -141,7 +141,7 @@ class ConfigEditor:
             scroll_amount = int(-event.delta / 120)
             self.canvas.yview_scroll(scroll_amount, "units")
             # 打印调试信息
-            print(f"Mouse wheel delta: {event.delta}, scroll amount: {scroll_amount}")
+            #print(f"Mouse wheel delta: {event.delta}, scroll amount: {scroll_amount}")
             # 防止事件冒泡，确保事件只被处理一次
             return "break"
         
@@ -174,7 +174,7 @@ class ConfigEditor:
                 # 直接使用root窗口获取焦点，这样可以移除所有控件的焦点
                 self.root.focus_set()
                 # 打印调试信息
-                print(f"Clicked on {event.widget}, removing focus")
+                #print(f"Clicked on {event.widget}, removing focus")
         
         # 为所有框架绑定点击事件
         def bind_frame_click_events():
@@ -289,7 +289,7 @@ class ConfigEditor:
                 "show_console_window_at_startup": False,
                 "save_log": True
             }
-        elif self.current_version == "5.1":
+        elif self.current_version == "6.0":
             return {
                 "ppt_backup_path": "C:\\Officebackup\\pptbckup",
                 "word_backup_path": "C:\\Officebackup\\wordbackup",
@@ -309,7 +309,7 @@ class ConfigEditor:
                 "show_console_window_at_startup": False,
                 "save_log": True
             }
-        else:  # 5.1Core
+        else:  # 6.0Core
             return {
                 "ppt_backup_path": "C:\\Officebackup\\pptbckup",
                 "word_backup_path": "C:\\Officebackup\\wordbackup",
@@ -353,7 +353,7 @@ class ConfigEditor:
         if cloud_section and cloud_params:
             if self.current_version == "5.0":
                 sections["功能开关"].append("upload_to_123pan_enable")
-            elif self.current_version == "5.1":
+            elif self.current_version == "6.0":
                 sections["功能开关"].append("upload_to_openlist_enable")
             sections[cloud_section] = cloud_params
         
@@ -361,7 +361,7 @@ class ConfigEditor:
         sections["精确备份"] = ["accurate_backup_enable", "accurate_backup_source_path", "accurate_backup_target_path"]
         
         # 添加控制台和日志设置（如果适用）
-        if self.current_version != "5.1Core":
+        if self.current_version != "6.0Core":
             sections["界面与日志"] = ["show_console_window_at_startup", "save_log"]
         else:
             sections["日志设置"] = ["save_log"]
@@ -541,8 +541,8 @@ class ConfigEditor:
         # 根据版本确定程序文件
         program_files = {
             "5.0": "OfficebackupSingle5.0.py",
-            "5.1": "Officebackup5.1.py",
-            "5.1Core": "Officebackup5.1Core.py"
+            "6.0": "Officebackup6.0.py",
+            "6.0Core": "Officebackup6.0Core.py"
         }
         
         if version in program_files:
