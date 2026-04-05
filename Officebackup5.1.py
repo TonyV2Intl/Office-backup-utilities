@@ -4,7 +4,9 @@ import time   #导入time模块，用于时间相关操作
 import win32com.client as win32   #导入win32com.client库，用于通过COM接口与Microsoft Office应用程序交互
 import datetime   #导入datetime库，用于计算备份所用时间
 from collections import defaultdict  #导入collections库的defaultdict方法，用于跟踪单个文件的跳过次数
-import requests   #导入requests库，用于HTTP请求
+import hashlib   #导入hashlib库，用于计算文件MD5值
+import sys   #导入sys模块，用于处理系统相关操作
+import traceback   #导入traceback模块，用于获取详细的异常信息
 
 import threading  #导入threading库，用于多线程操作
 import json  #导入json库，用于处理配置文件的读写
@@ -62,10 +64,10 @@ if config.get('save_log'):   #检查是否启用日志保存功能
     if os.path.exists('latest.log'):   #如果日志文件存在，则删除旧日志文件
         os.remove('latest.log')
     log_file = open('latest.log', 'a', encoding='utf-8')   #以追加模式打开日志文件
-def log_print(msg):   #定义日志打印函数
+def log_print(msg, source='main'):   #定义日志打印函数
     global runid    #声明全局变量runid，以便在函数内修改其值
     runid+=1   #运行计数器累加
-    log_msg= time.strftime('[%H:%M:%S-#') + str(runid) + '] ' + msg   # 打印带时间戳的日志消息到控制台
+    log_msg= time.strftime('[%H:%M:%S-#') + str(runid) + '-' + source + '] ' + msg   # 打印带时间戳和来源的日志消息到控制台
     print(log_msg)   # 打印日志消息到控制台
     if config.get('save_log'):   #如果启用日志保存功能，则将日志消息写入日志文件
         log_file.write(log_msg + '\n')   # 将日志消息写入日志文件
@@ -73,7 +75,7 @@ def log_print(msg):   #定义日志打印函数
 
 
 
-console_visible = config.get('show_console_window_at startup')   #获取控制台窗口初始状态参数（默认为隐藏）
+console_visible = config.get('show_console_window_at_startup')   #获取控制台窗口初始状态参数（默认为隐藏）
 console_window = ctypes.windll.kernel32.GetConsoleWindow()   #获取控制台窗口句柄
 if not console_visible:
     ctypes.windll.user32.ShowWindow(console_window, 0)   #隐藏控制台窗口
@@ -96,7 +98,7 @@ word_save_folder=config.get('word_backup_path')   #word备份路径
 
 
 try:   #尝试导入AList3SDK
-    from alist import AList, AListUser   #导入AList3SDK，用于与OpenList/AList服务交互（1.3.1版本默认是同步API）
+    from alist import AListUser, AListAsync   #导入AList3SDK，用于与OpenList/AList服务交互（1.3.1版本默认是同步API，需要指定使用AListAsync类已进行异步操作）
 except ImportError:
     log_print("alist3 not found, force disabled upload function")
     config['upload_to_openlist_enable'] = False   #强制禁用上传功能
@@ -107,9 +109,128 @@ openlist_username = config.get('openlist_username')
 openlist_password = config.get('openlist_password')
 openlist_target_folder = config.get('openlist_target_folder')
 
+
+
+def upload_to_openlist_thread():   #在单独线程中执行上传操作
+    while True:
+        if upload_queue and config.get('upload_to_openlist_enable'):
+            # 复制队列以避免在迭代时修改
+            current_queue = list(upload_queue)
+            for (upload_file, upload_source_path) in current_queue:
+                log_print('Start to upload ' + upload_file + ' to OpenList', source='openlist')   #打印上传开始信息
+                upload_start_time=datetime.datetime.now()   #记录上传操作开始时间
+                
+                try:
+                    # 定义异步上传函数
+                    async def async_upload():
+                        # 初始化AList客户端和用户（使用异步API）
+                        user = AListUser(openlist_username, openlist_password)
+                        client = AListAsync(openlist_url)
+                        upload_result = False
+                        
+                        # 构造目标文件路径
+                        target_file_path = os.path.join(openlist_target_folder, upload_file).replace(os.sep, '/')
+                        
+                        # 检查目标文件夹是否存在，不存在则创建
+                        target_folder = os.path.dirname(target_file_path).replace(os.sep, '/')
+                        
+                        # 登录
+                        login_result = await client.login(user)
+                        if login_result:
+                            log_print('Login to OpenList successfully', source='openlist')
+                        else:
+                            log_print('Login to OpenList failed', source='openlist')
+                            return False
+                        
+                        # 创建目标文件夹
+                        if target_folder and target_folder != '/':
+                            try:
+                                await client.mkdir(target_folder)
+                                log_print('Created target folder: ' + target_folder, source='openlist')
+                            except Exception as e:
+                                log_print('Failed to create target folder: ' + str(e), source='openlist')
+                        
+                        # 检查文件是否已存在，存在则删除
+                        try:
+                            await client.remove(target_file_path)
+                            log_print('Existing file in OpenList deleted successfully: ' + upload_file, source='openlist')
+                        except Exception as e:
+                            log_print('No matching file found in OpenList or delete failed: ' + str(e) + ', upload will continue', source='openlist')
+                        
+                        # 上传文件
+                        log_print('Starting file upload: ' + upload_file, source='openlist')
+                        log_print('Local file path: ' + upload_source_path, source='openlist')
+                        log_print('Target file path: ' + target_file_path, source='openlist')
+                        log_print('File size: ' + str(os.path.getsize(upload_source_path)) + ' bytes', source='openlist')
+                        
+                        # 使用 client.upload 方法，添加错误处理
+                        try:
+                            upload_result = await client.upload(target_file_path, upload_source_path)
+                            if upload_result:
+                                log_print('Upload to OpenList successfully: ' + upload_file, source='openlist')
+                            else:
+                                log_print('Upload to OpenList failed', source='openlist')
+                        except Exception as e:
+                            log_print('Upload failed with error: ' + str(e), source='openlist')
+                            # 检查是否是 504 超时错误
+                            if '504' in str(e) or 'timeout' in str(e).lower():
+                                log_print('Server timeout error, will retry in next cycle', source='openlist')
+                            else:
+                                log_print('Upload failed, will retry in next cycle', source='openlist')
+                        
+                        return upload_result
+                    
+                    # 运行异步上传函数
+                    import asyncio
+                    upload_result = asyncio.run(async_upload())
+                    
+                    # 检查上传是否成功
+                    if not upload_result:
+                        # 上传失败，不移除文件，让它在下次循环中重新尝试
+                        upload_end_time=datetime.datetime.now()   #记录上传操作结束时间
+                        upload_used_time=upload_end_time-upload_start_time   #计算上传所用时间
+                        log_print('Upload to OpenList failed: ' + upload_file + ' in ' + str(upload_used_time) + ' s, will retry in next cycle', source='openlist')
+                        continue
+                    
+                except Exception as e:
+                    log_print('Upload to OpenList failed: ' + str(e), source='openlist')
+                    import traceback
+                    log_print('Traceback: ' + traceback.format_exc(), source='openlist')
+                    # 发生错误时，不移除文件，让它在下次循环中重新尝试
+                    upload_end_time=datetime.datetime.now()   #记录上传操作结束时间
+                    upload_used_time=upload_end_time-upload_start_time   #计算上传所用时间
+                    log_print('Upload to OpenList failed: ' + upload_file + ' in ' + str(upload_used_time) + ' s, will retry in next cycle', source='openlist')
+                    continue
+                
+                upload_end_time=datetime.datetime.now()   #记录上传操作结束时间
+                upload_used_time=upload_end_time-upload_start_time   #计算上传所用时间
+                log_print('Upload to OpenList finished: ' + upload_file + ' in ' + str(upload_used_time) + ' s', source='openlist')
+                # 从队列中移除已处理的文件
+                if (upload_file, upload_source_path) in upload_queue:
+                    upload_queue.remove((upload_file, upload_source_path))
+        time.sleep(5)  # 避免忙等
+
+def upload_to_openlist():   #启动上传线程
+    if not config.get('upload_to_openlist_enable'):   #检查上传功能是否启用
+        return   #如果未启用，直接返回
+    
+    # 检查上传线程是否已经在运行
+    global upload_thread
+    if 'upload_thread' not in globals() or not upload_thread.is_alive():
+        # 创建并启动上传线程
+        upload_thread = threading.Thread(target=upload_to_openlist_thread)
+        upload_thread.daemon = True  # 设置为守护线程，随主程序终止而结束
+        upload_thread.start()
+        log_print('Upload thread started', source='openlist')
+
+
+
 if not openlist_url or not openlist_username or not openlist_password:   #检查OpenList配置是否完整
-    log_print("OpenList URL, username or password is empty, force disabled upload function, please provide valid credentials in the configuration file")
+    log_print('OpenList URL, username or password is empty, force disabled upload function, please provide valid credentials in the configuration file')
     config['upload_to_openlist_enable'] = False   #强制禁用上传功能
+else:
+    # 启动上传线程
+    upload_to_openlist()
 
 if config.get('accurate_backup_enable'):  # 检查精确备份功能是否启用
     source_path = config.get('accurate_backup_source_path')   #获取源文件夹路径
@@ -119,6 +240,20 @@ if config.get('accurate_backup_enable'):  # 检查精确备份功能是否启用
         with open('OBU5.1.json', 'w', encoding='utf-8') as f:   #将禁用精确备份功能写入配置文件
                 config['accurate_backup_enable'] = False   #强制禁用精确备份功能
                 json.dump(config, f, indent=4, ensure_ascii=False)   #写入更新后的配置文件
+
+
+
+# 计算文件MD5值的函数
+def calculate_md5(file_path):  # 计算文件的MD5值
+    hash_md5 = hashlib.md5()
+    try:
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                hash_md5.update(chunk)
+        return hash_md5.hexdigest()
+    except Exception as e:
+        log_print('Error calculating MD5 for ' + file_path + ': ' + str(e))
+        return None
 
 
 
@@ -145,13 +280,18 @@ def save_open_ppt_files(ppt_save_folder):   #定义ppt保存函数，参数ppt_s
                 if SaveAs_method_activated[ppt_name] == True:   #如果SaveAs方法已被激活，则不再使用复制方法
                     log_print(ppt_name + ' has already existed in ' + ppt_save_folder + ', skipped backup (SaveAs method activated)')   #打印跳过信息
                     continue   #跳过此次备份
-                if file_skip_count[ppt_name] < max_skipping_time and Existed_in_this_session[ppt_name] == True:  # 仅当同一文件连续跳过规定次数，且在本次会话中出现过时才允许重新备份
-                    file_skip_count[ppt_name] += 1   #该文件的跳过计数器累加
-                    if file_skip_count[ppt_name] == max_skipping_time:   # 如果跳过次数达到规定次数，打印提示信息
-                        log_print(ppt_name + ' has already existed in ' + ppt_save_folder + ', skipped backup (skipped times: ' + str(file_skip_count[ppt_name]) + ', this file will be backed up again during the next request)')   #打印跳过信息
-                    else:
-                        log_print(ppt_name + ' has already existed in ' + ppt_save_folder + ', skipped backup (skipped times: ' + str(file_skip_count[ppt_name]) + ')')   #打印跳过信息
+                
+                # 计算原始文件和备份文件的MD5值
+                original_md5 = calculate_md5(ppt_path)
+                backup_md5 = calculate_md5(new_ppt_path)
+                
+                if original_md5 and backup_md5 and original_md5 == backup_md5:
+                    # MD5值相同，跳过备份
+                    log_print(ppt_name + ' has already existed in ' + ppt_save_folder + ', skipped backup (MD5 match)')   #打印跳过信息
                     continue   #跳过此次备份
+                else:
+                    # MD5值不同，需要备份
+                    log_print(ppt_name + ' has changed, backup will begin soon (MD5 mismatch)')
             
             Existed_in_this_session[ppt_name] = True   #标记该文件在本次会话中出现过
             log_print('Start to backup ' + ppt_name + ' to ' + ppt_save_folder)   #打印备份开始信息
@@ -218,13 +358,18 @@ def save_open_word_files(word_save_folder):   #定义word保存函数，参数wo
                 if SaveAs_method_activated[doc_name] == True:   #如果SaveAs方法已被激活，则不再使用复制方法
                     log_print(doc_name + ' has already existed in ' + word_save_folder + ', skipped backup (SaveAs method activated)')   #打印跳过信息
                     continue   #跳过此次备份
-                if file_skip_count[doc_name] < max_skipping_time and Existed_in_this_session[doc_name] == True:  # 仅当同一文件连续跳过规定次数，且在本次会话中出现过时才允许重新备份
-                    file_skip_count[doc_name] += 1   #该文件的跳过计数器累加
-                    if file_skip_count[doc_name] == max_skipping_time:   # 如果跳过次数达到规定次数，打印提示信息
-                        log_print(doc_name + ' has already existed in ' + word_save_folder + ', skipped backup (skipped times: ' + str(file_skip_count[doc_name]) + ', this file will be backed up again during the next request)')   #打印跳过信息
-                    else:
-                        log_print(doc_name + ' has already existed in ' + word_save_folder + ', skipped backup (skipped times: ' + str(file_skip_count[doc_name]) + ')')   #打印跳过信息
+                
+                # 计算原始文件和备份文件的MD5值
+                original_md5 = calculate_md5(doc_path)
+                backup_md5 = calculate_md5(new_doc_path)
+                
+                if original_md5 and backup_md5 and original_md5 == backup_md5:
+                    # MD5值相同，跳过备份
+                    log_print(doc_name + ' has already existed in ' + word_save_folder + ', skipped backup (MD5 match)')   #打印跳过信息
                     continue   #跳过此次备份
+                else:
+                    # MD5值不同，需要备份
+                    log_print(doc_name + ' has changed, backup will begin soon (MD5 mismatch)')
 
             Existed_in_this_session[doc_name] = True   #标记该文件在本次会话中出现过
             log_print('Start to backup ' + doc_name + ' to ' + word_save_folder)   #打印备份开始信息
@@ -291,13 +436,18 @@ def save_open_WPS_files(ppt_save_folder):   #定义WPS保存函数，参数ppt_s
                 if SaveAs_method_activated[WPS_ppt_name] == True:   #如果SaveAs方法已被激活，则不再使用复制方法
                     log_print(WPS_ppt_name + ' has already existed in ' + ppt_save_folder + ', skipped backup (SaveAs method activated)')   #打印带时间戳和运行次数的跳过信息
                     continue   #跳过此次备份
-                if file_skip_count[WPS_ppt_name] < max_skipping_time and Existed_in_this_session[WPS_ppt_name] == True:  # 仅当同一文件连续跳过规定次数，且在本次会话中出现过时才允许重新备份
-                    file_skip_count[WPS_ppt_name] += 1   #该文件的跳过计数器累加
-                    if file_skip_count[WPS_ppt_name] == max_skipping_time:   # 如果跳过次数达到规定次数，打印提示信息
-                        log_print(WPS_ppt_name + ' has already existed in ' + ppt_save_folder + ', skipped backup (skipped times: ' + str(file_skip_count[WPS_ppt_name]) + ', this file will be backed up again during the next request)')   #打印带时间戳和运行次数的跳过信息
-                    else:
-                        log_print(WPS_ppt_name + ' has already existed in ' + ppt_save_folder + ', skipped backup (skipped times: ' + str(file_skip_count[WPS_ppt_name]) + ')')   #打印带时间戳和运行次数的跳过信息
+                
+                # 计算原始文件和备份文件的MD5值
+                original_md5 = calculate_md5(WPS_ppt_path)
+                backup_md5 = calculate_md5(WPS_new_ppt_path)
+                
+                if original_md5 and backup_md5 and original_md5 == backup_md5:
+                    # MD5值相同，跳过备份
+                    log_print(WPS_ppt_name + ' has already existed in ' + ppt_save_folder + ', skipped backup (MD5 match)')   #打印带时间戳和运行次数的跳过信息
                     continue   #跳过此次备份
+                else:
+                    # MD5值不同，需要备份
+                    log_print(WPS_ppt_name + ' has changed, backup will begin soon (MD5 mismatch)')
 
             Existed_in_this_session[WPS_ppt_name] = True   #标记该文件在本次会话中出现过
             log_print('Start to backup ' + WPS_ppt_name + ' to ' + ppt_save_folder)   #打印备份开始信息
@@ -340,112 +490,6 @@ def save_open_WPS_files(ppt_save_folder):   #定义WPS保存函数，参数ppt_s
                 log_print('No ppt available now (WPS application not detected)')   #打印异常信息
             else:   #打印出其他错误并继续轮询
                 log_print('Exception: ' + type(e).__name__ + ', request continue')   #打印异常信息
-
-
-
-def upload_to_openlist():   #定义上传函数
-    global upload_queue  #声明全局上传队列变量
-    if not config.get('upload_to_openlist_enable'):   #检查上传功能是否启用
-        return   #如果未启用，直接返回
-    
-    # 直接在主线程中执行同步上传（使用alist3 1.3.1版本的异步API）
-    while upload_queue:
-        # 复制队列以避免在迭代时修改
-        current_queue = list(upload_queue)
-        for (upload_file, upload_source_path) in current_queue:
-            log_print('Start to upload ' + upload_file + ' to OpenList')   #打印上传开始信息
-            upload_start_time=datetime.datetime.now()   #记录上传操作开始时间
-            
-            try:
-                # 定义异步上传函数
-                async def async_upload():
-                    # 初始化AList客户端和用户（使用异步API）
-                    from alist import AListAsync
-                    user = AListUser(openlist_username, openlist_password)
-                    client = AListAsync(openlist_url)
-                    upload_result = False
-                    
-                    # 构造目标文件路径
-                    target_file_path = os.path.join(openlist_target_folder, upload_file).replace(os.sep, '/')
-                    
-                    # 检查目标文件夹是否存在，不存在则创建
-                    target_folder = os.path.dirname(target_file_path).replace(os.sep, '/')
-                    
-                    # 登录
-                    login_result = await client.login(user)
-                    if login_result:
-                        log_print('Login to OpenList successfully')
-                    else:
-                        log_print('Login to OpenList failed')
-                        return False
-                    
-                    # 创建目标文件夹
-                    if target_folder and target_folder != '/':
-                        try:
-                            await client.mkdir(target_folder)
-                            log_print('Created target folder: ' + target_folder)
-                        except Exception as e:
-                            log_print('Failed to create target folder: ' + str(e))
-                    
-                    # 检查文件是否已存在，存在则删除
-                    try:
-                        await client.remove(target_file_path)
-                        log_print('Existing file in OpenList deleted successfully: ' + upload_file)
-                    except Exception as e:
-                        log_print('No matching file found in OpenList or delete failed: ' + str(e) + ', upload will continue')
-                    
-                    # 上传文件
-                    log_print('Starting file upload: ' + upload_file)
-                    log_print('Local file path: ' + upload_source_path)
-                    log_print('Target file path: ' + target_file_path)
-                    log_print('File size: ' + str(os.path.getsize(upload_source_path)) + ' bytes')
-                    
-                    # 使用 client.upload 方法，添加错误处理
-                    try:
-                        upload_result = await client.upload(target_file_path, upload_source_path)
-                        if upload_result:
-                            log_print('Upload to OpenList successfully: ' + upload_file)
-                        else:
-                            log_print('Upload to OpenList failed')
-                    except Exception as e:
-                        log_print('Upload failed with error: ' + str(e))
-                        # 检查是否是 504 超时错误
-                        if '504' in str(e) or 'timeout' in str(e).lower():
-                            log_print('Server timeout error, will retry in next cycle')
-                        else:
-                            log_print('Upload failed, will retry in next cycle')
-                    
-                    return upload_result
-                
-                # 运行异步上传函数
-                import asyncio
-                upload_result = asyncio.run(async_upload())
-                
-                # 检查上传是否成功
-                if not upload_result:
-                    # 上传失败，不移除文件，让它在下次循环中重新尝试
-                    upload_end_time=datetime.datetime.now()   #记录上传操作结束时间
-                    upload_used_time=upload_end_time-upload_start_time   #计算上传所用时间
-                    log_print('Upload to OpenList failed: ' + upload_file + ' in ' + str(upload_used_time) + ' s, will retry in next cycle')
-                    continue
-                
-            except Exception as e:
-                log_print('Upload to OpenList failed: ' + str(e))
-                import traceback
-                log_print('Traceback: ' + traceback.format_exc())
-                # 发生错误时，不移除文件，让它在下次循环中重新尝试
-                upload_end_time=datetime.datetime.now()   #记录上传操作结束时间
-                upload_used_time=upload_end_time-upload_start_time   #计算上传所用时间
-                log_print('Upload to OpenList failed: ' + upload_file + ' in ' + str(upload_used_time) + ' s, will retry in next cycle')
-                continue
-            
-            upload_end_time=datetime.datetime.now()   #记录上传操作结束时间
-            upload_used_time=upload_end_time-upload_start_time   #计算上传所用时间
-            log_print('Upload to OpenList finished: ' + upload_file + ' in ' + str(upload_used_time) + ' s')
-            # 从队列中移除已处理的文件
-            if (upload_file, upload_source_path) in upload_queue:
-                upload_queue.remove((upload_file, upload_source_path))
-    log_print('Upload queue has been cleared')
 
 
 
@@ -505,6 +549,23 @@ icon_task = threading.Thread(target=icon.run)   #创建托盘图标线程
 icon_task.daemon = True   #设置为守护线程（随主程序终止而自动结束）
 icon_task.start()   #启动托盘图标线程
 
+# 全局异常处理函数
+def global_exception_handler(exctype, value, tb):   #处理全局未捕获异常
+    # 构建完整的错误信息，包括 Traceback (most recent call last):
+    error_msg = "".join(traceback.format_exception(exctype, value, tb))
+    
+    # 打印到控制台
+    print(f"[ERROR] {error_msg}")
+    
+    # 写入日志文件
+    if config.get('save_log'):
+        log_msg = time.strftime('[%H:%M:%S]') + ' [ERROR] ' + error_msg
+        log_file.write(log_msg + '\n')
+        log_file.flush()
+
+# 设置全局异常处理器
+sys.excepthook = global_exception_handler
+
 while True:   #主线程无限循环，防止程序退出
     if config.get('ppt_backup_enable'):   #检查PPT备份功能是否启用
         save_open_ppt_files(ppt_save_folder)   #启动线程
@@ -512,8 +573,6 @@ while True:   #主线程无限循环，防止程序退出
         save_open_word_files(word_save_folder)   #启动线程
     if config.get('wps_backup_enable'):   #检查WPS备份功能是否启用
         save_open_WPS_files(ppt_save_folder)   #启动线程
-    if config.get('upload_to_openlist_enable'):   #检查上传到OpenList功能是否启用
-        upload_to_openlist()   #启动线程
     if config.get('accurate_backup_enable'):  # 检查精确备份功能是否启用
         accurate_backup()  # 启动线程
     time.sleep(sleeptime)   #等待指定时间后继续轮询
