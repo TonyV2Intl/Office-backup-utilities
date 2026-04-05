@@ -72,7 +72,7 @@ def log_print(msg):   #定义日志打印函数
 
 
 
-console_visible = config.get('show_console_window_at startup')   #获取控制台窗口初始状态参数（默认为隐藏）
+console_visible = config.get('show_console_window_at_startup')   #获取控制台窗口初始状态参数（默认为隐藏）
 console_window = ctypes.windll.kernel32.GetConsoleWindow()   #获取控制台窗口句柄
 if not console_visible:
     ctypes.windll.user32.ShowWindow(console_window, 0)   #隐藏控制台窗口
