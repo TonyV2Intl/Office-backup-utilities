@@ -1,5 +1,4 @@
 Pillow
 pystray
 pywin32
-alist3
-123pan
+alist3==1.3.1
