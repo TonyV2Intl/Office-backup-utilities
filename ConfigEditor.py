@@ -56,7 +56,6 @@ class ConfigEditor:
         self.setup_styles()
         
         # 初始隐藏配置界面
-        self.config_frame.pack_forget()
         self.status_var.set("请选择版本")
     
     def create_widgets(self):
@@ -64,8 +63,20 @@ class ConfigEditor:
         main_frame = ttk.Frame(self.root)
         main_frame.pack(fill=tk.BOTH, expand=True)
         
-        # 顶部框架
-        top_frame = ttk.Frame(main_frame, padding="10")
+        # 选项卡控件（放在最顶部）
+        self.notebook = ttk.Notebook(main_frame)
+        self.notebook.pack(fill=tk.BOTH, expand=True)
+        
+        # 配置编辑选项卡
+        self.config_frame = ttk.Frame(self.notebook)
+        self.notebook.add(self.config_frame, text="配置编辑")
+        
+        # 连通性测试选项卡
+        self.test_frame = ttk.Frame(self.notebook)
+        self.notebook.add(self.test_frame, text="连通性测试")
+        
+        # 顶部框架（版本选择和按钮）
+        top_frame = ttk.Frame(self.config_frame, padding="10")
         top_frame.pack(fill=tk.X)
         
         # 左侧版本选择区域
@@ -79,7 +90,7 @@ class ConfigEditor:
         version_combobox = ttk.Combobox(
             version_frame, 
             textvariable=self.version_var, 
-            values=["", "5.0", "6.0", "6.0Core"],
+            values=["5.0", "6.0", "6.0Core"],
             state="readonly",
             width=10,
             takefocus=False
@@ -100,9 +111,10 @@ class ConfigEditor:
         ttk.Button(button_frame, text="重做(下一步)", command=self.redo, takefocus=False).pack(side=tk.RIGHT, padx=5, fill=tk.Y)
         ttk.Button(button_frame, text="撤销(上一步)", command=self.undo, takefocus=False).pack(side=tk.RIGHT, padx=5, fill=tk.Y)
         
+        # 创建连通性测试界面
+        self.create_test_widgets()
+        
         # 配置编辑区域
-        self.config_frame = ttk.Frame(main_frame, padding="10")
-        self.config_frame.pack(fill=tk.BOTH, expand=True)
         
         # 创建滚动条
         scrollbar = ttk.Scrollbar(self.config_frame, takefocus=False)
@@ -199,6 +211,246 @@ class ConfigEditor:
         
         self.bind_focus_events = bind_focus_events
     
+    def create_test_widgets(self):
+        """创建连通性测试界面"""
+        # 主测试框架
+        test_main_frame = ttk.Frame(self.test_frame, padding="10")
+        test_main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # COM 接口测试板块
+        com_test_frame = ttk.LabelFrame(test_main_frame, text="COM 接口测试", padding="10")
+        com_test_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # COM 测试按钮
+        ttk.Button(com_test_frame, text="测试 COM 接口", command=self.test_com_interfaces, takefocus=False).pack(side=tk.LEFT, padx=5, pady=5)
+        
+        # COM 测试结果显示区域
+        self.com_test_results_frame = ttk.Frame(com_test_frame)
+        self.com_test_results_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # 初始显示等待测试状态
+        self.ppt_label = ttk.Label(self.com_test_results_frame, text="PowerPoint: 等待测试")
+        self.ppt_label.pack(anchor=tk.W, padx=5, pady=2)
+        
+        self.word_label = ttk.Label(self.com_test_results_frame, text="Word: 等待测试")
+        self.word_label.pack(anchor=tk.W, padx=5, pady=2)
+        
+        self.wps_label = ttk.Label(self.com_test_results_frame, text="WPS: 等待测试")
+        self.wps_label.pack(anchor=tk.W, padx=5, pady=2)
+        
+        # 连通性测试板块
+        conn_test_frame = ttk.LabelFrame(test_main_frame, text="网络存储连通性测试", padding="10")
+        conn_test_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # 左侧控件容器
+        left_frame = ttk.Frame(conn_test_frame)
+        left_frame.pack(side=tk.LEFT, padx=5, pady=5, fill=tk.Y)
+        
+        # 版本选择
+        version_frame = ttk.Frame(left_frame)
+        version_frame.pack(pady=2, fill=tk.X)
+        ttk.Label(version_frame, text="版本选择:", font=self.font).pack(side=tk.LEFT, padx=5, fill=tk.Y)
+        
+        self.test_version_var = tk.StringVar(value="")
+        test_version_combobox = ttk.Combobox(
+            version_frame, 
+            textvariable=self.test_version_var, 
+            values=["5.0", "6.0"],
+            state="readonly",
+            width=10,
+            takefocus=False
+        )
+        test_version_combobox.pack(side=tk.LEFT, padx=5, fill=tk.Y)
+        
+        # 连通性测试按钮
+        ttk.Button(left_frame, text="测试云盘连通性", command=self.test_cloud_connection, takefocus=False).pack(pady=5, fill=tk.X)
+        
+        # 连通性测试结果显示区域
+        self.conn_test_results_frame = ttk.Frame(conn_test_frame)
+        self.conn_test_results_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+    
+    def test_com_interfaces(self):
+        """测试 COM 接口"""
+        # 清空结果显示
+        for widget in self.com_test_results_frame.winfo_children():
+            widget.destroy()
+        
+        # 测试 PowerPoint
+        try:
+            import win32com.client
+            powerpoint = win32com.client.Dispatch("PowerPoint.Application")
+            if powerpoint.Visible:
+                presentations = powerpoint.Presentations
+                if presentations.Count > 0:
+                    # 找到文件，显示绿色
+                    ppt_frame = ttk.LabelFrame(self.com_test_results_frame, text="PowerPoint: 已打开")
+                    ppt_frame.pack(fill=tk.X, padx=5, pady=2)
+                    for i in range(1, presentations.Count + 1):
+                        presentation = presentations(i)
+                        ttk.Label(ppt_frame, text=f"  - {presentation.Name}", foreground="green").pack(anchor=tk.W, padx=10, pady=1)
+                else:
+                    # 已打开但无文件，显示绿色
+                    ttk.Label(self.com_test_results_frame, text="PowerPoint: 已打开，但无文件", foreground="green").pack(anchor=tk.W, padx=5, pady=2)
+            else:
+                # 未打开，显示红色
+                ttk.Label(self.com_test_results_frame, text="PowerPoint: 未打开", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+        except Exception as e:
+            # 错误，显示红色
+            ttk.Label(self.com_test_results_frame, text=f"PowerPoint: 错误 - {str(e)}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+        
+        # 测试 Word
+        try:
+            import win32com.client
+            word = win32com.client.Dispatch("Word.Application")
+            if word.Visible:
+                documents = word.Documents
+                if documents.Count > 0:
+                    # 找到文件，显示绿色
+                    word_frame = ttk.LabelFrame(self.com_test_results_frame, text="Word: 已打开")
+                    word_frame.pack(fill=tk.X, padx=5, pady=2)
+                    for i in range(1, documents.Count + 1):
+                        document = documents(i)
+                        ttk.Label(word_frame, text=f"  - {document.Name}", foreground="green").pack(anchor=tk.W, padx=10, pady=1)
+                else:
+                    # 已打开但无文件，显示绿色
+                    ttk.Label(self.com_test_results_frame, text="Word: 已打开，但无文件", foreground="green").pack(anchor=tk.W, padx=5, pady=2)
+            else:
+                # 未打开，显示红色
+                ttk.Label(self.com_test_results_frame, text="Word: 未打开", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+        except Exception as e:
+            # 错误，显示红色
+            ttk.Label(self.com_test_results_frame, text=f"Word: 错误 - {str(e)}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+        
+        # 测试 WPS
+        try:
+            import win32com.client
+            wps = win32com.client.Dispatch("KET.Application")
+            if wps.Visible:
+                documents = wps.Documents
+                if documents.Count > 0:
+                    # 找到文件，显示绿色
+                    wps_frame = ttk.LabelFrame(self.com_test_results_frame, text="WPS: 已打开")
+                    wps_frame.pack(fill=tk.X, padx=5, pady=2)
+                    for i in range(1, documents.Count + 1):
+                        document = documents(i)
+                        ttk.Label(wps_frame, text=f"  - {document.Name}", foreground="green").pack(anchor=tk.W, padx=10, pady=1)
+                else:
+                    # 已打开但无文件，显示绿色
+                    ttk.Label(self.com_test_results_frame, text="WPS: 已打开，但无文件", foreground="green").pack(anchor=tk.W, padx=5, pady=2)
+            else:
+                # 未打开，显示红色
+                ttk.Label(self.com_test_results_frame, text="WPS: 未打开", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+        except Exception as e:
+            # 错误，显示红色
+            ttk.Label(self.com_test_results_frame, text=f"WPS: 错误 - {str(e)}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+    
+    def test_cloud_connection(self):
+        """测试云盘连通性"""
+        # 清空结果显示
+        for widget in self.conn_test_results_frame.winfo_children():
+            widget.destroy()
+        
+        # 获取当前选择的版本
+        version = self.test_version_var.get()
+        if not version:
+            ttk.Label(self.conn_test_results_frame, text="请先选择版本", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+            return
+        
+        # 加载配置文件
+        try:
+            config_file = self.version_configs[version]["config_file"]
+            if os.path.exists(config_file):
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+            else:
+                ttk.Label(self.conn_test_results_frame, text=f"配置文件 {config_file} 不存在", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+                return
+        except Exception as e:
+            ttk.Label(self.conn_test_results_frame, text=f"加载配置文件失败: {str(e)}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+            return
+        
+        # 测试 123 云盘 (版本 5.0)
+        if version == "5.0":
+            client_id = config.get("client_id")
+            client_secret = config.get("client_secret")
+            access_token = config.get("access_token")
+            
+            if not client_id or not client_secret or not access_token:
+                ttk.Label(self.conn_test_results_frame, text="123云盘参数不完整", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+            else:
+                # 测试 123 云盘连通性
+                try:
+                    import requests
+                    # 简单测试 token 是否有效
+                    url = "https://open.123pan.com/api/v1/file/list"
+                    headers = {
+                        "Authorization": f"Bearer {access_token}"
+                    }
+                    response = requests.get(url, headers=headers, timeout=10)
+                    if response.status_code == 200:
+                        # 登录测试成功，打印详细信息
+                        result_frame = ttk.LabelFrame(self.conn_test_results_frame, text="123云盘: 连通性测试成功")
+                        result_frame.pack(fill=tk.X, padx=5, pady=2)
+                        ttk.Label(result_frame, text=f"  Client ID: {client_id}").pack(anchor=tk.W, padx=10, pady=1)
+                        ttk.Label(result_frame, text=f"  测试状态: 成功").pack(anchor=tk.W, padx=10, pady=1)
+                        ttk.Label(result_frame, text=f"  响应状态码: {response.status_code}").pack(anchor=tk.W, padx=10, pady=1)
+                    else:
+                        ttk.Label(self.conn_test_results_frame, text=f"123云盘: 连通性测试失败 - {response.status_code}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+                except Exception as e:
+                    ttk.Label(self.conn_test_results_frame, text=f"123云盘: 连通性测试错误 - {str(e)}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+        
+        # 测试 OpenList (版本 6.0)
+        elif version == "6.0":
+            openlist_url = config.get("openlist_url")
+            openlist_username = config.get("openlist_username")
+            openlist_password = config.get("openlist_password")
+            
+            if not openlist_url or not openlist_username or not openlist_password:
+                ttk.Label(self.conn_test_results_frame, text="OpenList参数不完整", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+            else:
+                # 测试 OpenList 连通性
+                try:
+                    from alist import AList, AListUser
+                    import asyncio
+                    
+                    # 为当前线程创建事件循环
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    
+                    try:
+                        # 测试 OpenList 连通性（同步操作）
+                        user = AListUser(openlist_username, openlist_password)
+                        client = AList(openlist_url)
+                        
+                        # 尝试登录
+                        client.login(user)
+                        
+                        # 无论 login_result 返回什么，只要不抛异常就认为成功
+                        # 登录测试成功，打印详细信息
+                        result_frame = ttk.LabelFrame(self.conn_test_results_frame, text="OpenList: 连通性测试成功")
+                        result_frame.pack(fill=tk.X, padx=5, pady=2)
+                        ttk.Label(result_frame, text=f"  服务器 URL: {openlist_url}").pack(anchor=tk.W, padx=10, pady=1)
+                        ttk.Label(result_frame, text=f"  用户名: {openlist_username}").pack(anchor=tk.W, padx=10, pady=1)
+                    finally:
+                        # 清理事件循环，确保所有任务都已完成
+                        try:
+                            # 取消所有未完成的任务
+                            pending = asyncio.all_tasks(loop)
+                            for task in pending:
+                                task.cancel()
+                            # 等待所有任务完成
+                            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                        except Exception:
+                            pass
+                        finally:
+                            # 关闭事件循环
+                            loop.close()
+                except Exception as e:
+                    # 打印异常信息
+                    import traceback
+                    traceback.print_exc()
+                    ttk.Label(self.conn_test_results_frame, text=f"OpenList: 连通性测试错误 - {str(e)}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+    
     def on_version_change(self):
         new_version = self.version_var.get()
         if new_version:
@@ -210,12 +462,10 @@ class ConfigEditor:
             
             self.current_version = new_version
             # 显示配置界面
-            self.config_frame.pack(fill=tk.BOTH, expand=True)
             self.load_config()
             self.status_var.set(f"已加载版本 {new_version} 的配置文件")
         else:
             # 隐藏配置界面
-            self.config_frame.pack_forget()
             self.status_var.set("请选择版本")
     
     def create_status_bar(self):
