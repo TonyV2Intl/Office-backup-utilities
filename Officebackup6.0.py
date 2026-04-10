@@ -10,6 +10,7 @@ import traceback   #导入traceback模块，用于获取详细的异常信息
 
 import threading  #导入threading库，用于多线程操作
 import json  #导入json库，用于处理配置文件的读写
+import concurrent.futures  #导入concurrent.futures模块，用于添加超时机制
 
 import pystray   #导入pystray库，用于创建系统托盘图标
 from pystray import MenuItem as item   #从pystray库中导入MenuItem类，用于创建托盘菜单项
@@ -206,7 +207,7 @@ def upload_to_openlist_thread():   #在单独线程中执行上传操作
                 # 从队列中移除已处理的文件
                 if (upload_file, upload_source_path) in upload_queue:
                     upload_queue.remove((upload_file, upload_source_path))
-        time.sleep(5)  # 避免忙等
+        time.sleep(10)  # 避免忙等
 
 def upload_to_openlist():   #启动上传线程
     if not config.get('upload_to_openlist_enable'):   #检查上传功能是否启用
@@ -241,12 +242,30 @@ if config.get('accurate_backup_enable'):  # 检查精确备份功能是否启用
 
 
 
+# 超时装饰器函数
+def timeout(seconds=30):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(func, *args, **kwargs)
+                try:
+                    return future.result(timeout=seconds)
+                except concurrent.futures.TimeoutError:
+                    log_print(f"Function {func.__name__} timed out after {seconds} seconds")
+                    return None
+                except Exception as e:
+                    log_print(f"Error in {func.__name__}: {str(e)}")
+                    return None
+        return wrapper
+    return decorator
+
 # 计算文件MD5值的函数
 def calculate_md5(file_path):  # 计算文件的MD5值
     hash_md5 = hashlib.md5()
     try:
+        # 使用更大的块大小以提高性能
         with open(file_path, "rb") as f:
-            for chunk in iter(lambda: f.read(4096), b""):
+            for chunk in iter(lambda: f.read(8192), b""):  # 使用8192字节的块大小
                 hash_md5.update(chunk)
         return hash_md5.hexdigest()
     except Exception as e:
@@ -257,6 +276,7 @@ def calculate_md5(file_path):  # 计算文件的MD5值
 
 
 
+@timeout(seconds=60)  # 添加60秒超时机制
 def save_open_ppt_files(ppt_save_folder):   #定义ppt保存函数，参数ppt_save_folder是备份文件的存储路径
     global upload_queue  # 声明全局上传队列变量
     try:
@@ -335,6 +355,7 @@ def save_open_ppt_files(ppt_save_folder):   #定义ppt保存函数，参数ppt_s
 
 
 
+@timeout(seconds=60)  # 添加60秒超时机制
 def save_open_word_files(word_save_folder):   #定义word保存函数，参数word_save_folder是备份文件的存储路径
     global upload_queue  # 声明全局上传队列变量
     try:
@@ -413,6 +434,7 @@ def save_open_word_files(word_save_folder):   #定义word保存函数，参数wo
 
 
 
+@timeout(seconds=60)  # 添加60秒超时机制
 def save_open_WPS_files(ppt_save_folder):   #定义WPS保存函数，参数ppt_save_folder是备份文件的存储路径
     global upload_queue  # 声明全局上传队列变量
     try:
@@ -491,6 +513,7 @@ def save_open_WPS_files(ppt_save_folder):   #定义WPS保存函数，参数ppt_s
 
 
 
+@timeout(seconds=120)  # 添加120秒超时机制（精确备份可能需要更长时间）
 def accurate_backup():   #定义精确备份函数
     try:
         if os.path.exists(source_path):   #检查源文件夹是否存在
