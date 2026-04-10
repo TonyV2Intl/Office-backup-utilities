@@ -27,7 +27,6 @@ default_config = {
     "word_backup_path": "C:\\Officebackup\\wordbackup",   #Word备份路径
     #指定间隔时间，单位为秒
     "interval": 60,   #指定所有操作的轮询时间间隔，单位为秒（默认60秒）
-    "max_skipping_time": 15,   #指定连续跳过次数（默认15次）
     #功能开启或禁用
     "ppt_backup_enable": True,   #PPT备份功能
     "word_backup_enable": True,   #Word备份功能
@@ -90,7 +89,6 @@ Existed_in_this_session = defaultdict(bool)  # 使用字典记录每个文件是
 upload_queue = []  # 初始化上传队列
 #从配置文件读取变量
 sleeptime=config.get('interval')   #轮询间隔（默认为60秒）
-max_skipping_time=config.get('max_skipping_time')   #连续跳过次数（默认为15次）
 ppt_save_folder=config.get('ppt_backup_path')   #ppt备份路径
 word_save_folder=config.get('word_backup_path')   #word备份路径
 '''behavior = config.get('tray_left_click_behavior')  # 托盘图标左键点击行为（默认为打开控制台）（无法生效）'''
