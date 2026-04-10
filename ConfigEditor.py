@@ -270,6 +270,10 @@ class ConfigEditor:
     
     def test_com_interfaces(self):
         """测试 COM 接口"""
+        # 记录开始时间
+        import time
+        start_time = time.time()
+        
         # 清空结果显示
         for widget in self.com_test_results_frame.winfo_children():
             widget.destroy()
@@ -342,9 +346,19 @@ class ConfigEditor:
         except Exception as e:
             # 错误，显示红色
             ttk.Label(self.com_test_results_frame, text=f"WPS: 错误 - {str(e)}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+        
+        # 计算测试用时
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        # 显示测试用时
+        ttk.Label(self.com_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
     
     def test_cloud_connection(self):
         """测试云盘连通性"""
+        # 记录开始时间
+        import time
+        start_time = time.time()
+        
         # 清空结果显示
         for widget in self.conn_test_results_frame.winfo_children():
             widget.destroy()
@@ -353,6 +367,11 @@ class ConfigEditor:
         version = self.test_version_var.get()
         if not version:
             ttk.Label(self.conn_test_results_frame, text="请先选择版本", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+            # 计算测试用时
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            # 显示测试用时
+            ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
             return
         
         # 加载配置文件
@@ -363,9 +382,19 @@ class ConfigEditor:
                     config = json.load(f)
             else:
                 ttk.Label(self.conn_test_results_frame, text=f"配置文件 {config_file} 不存在", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+                # 计算测试用时
+                end_time = time.time()
+                elapsed_time = end_time - start_time
+                # 显示测试用时
+                ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
                 return
         except Exception as e:
             ttk.Label(self.conn_test_results_frame, text=f"加载配置文件失败: {str(e)}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+            # 计算测试用时
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            # 显示测试用时
+            ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
             return
         
         # 测试 123 云盘 (版本 5.0)
@@ -449,6 +478,12 @@ class ConfigEditor:
                     import traceback
                     traceback.print_exc()
                     ttk.Label(self.conn_test_results_frame, text=f"OpenList: 连通性测试错误 - {str(e)}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+        
+        # 计算测试用时
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        # 显示测试用时
+        ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
     
     def on_version_change(self):
         new_version = self.version_var.get()
@@ -477,13 +512,13 @@ class ConfigEditor:
         style = ttk.Style()
         
         # 绿色按钮样式
-        style.configure("Green.TButton", foreground="green", font=("SimHei", 10))
+        style.configure("Green.TButton", foreground="green")
         
         # 红色按钮样式
-        style.configure("Red.TButton", foreground="red", font=("SimHei", 10))
+        style.configure("Red.TButton", foreground="red")
         
         # 选项卡样式
-        style.configure("TNotebook.Tab", padding=(10, 1), font=("SimHei", 10))
+        style.configure("TNotebook.Tab", padding=(10, 1))
     
 
     
