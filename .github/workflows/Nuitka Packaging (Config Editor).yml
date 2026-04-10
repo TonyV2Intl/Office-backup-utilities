@@ -1,0 +1,51 @@
+name: Nuitka Packaging (Config Editor)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number to use for the build (must be a tuple of up to 4 integer values, e.g. 6.0)'
+        required: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python (3.8, x64)
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.8'
+        architecture: 'x64'
+    
+    - name: Install Visual Studio Build Tools 2015 (14.0)
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        toolset: 14.0
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -U nuitka==1.9.5
+        pip install -r requirements.txt
+    
+    - name: Package ConfigEditor with Nuitka
+      run: |
+        $version = "${{ github.event.inputs.version }}"
+        $program = "ConfigEditor.py"
+        if (Test-Path $program) {
+          Write-Host "Packaging $program with version $version..."
+          python -m nuitka --standalone --follow-imports --python-flag="-S" --main="$program" --remove-output --windows-icon-from-ico="PythonLight.ico" --file-version="$version" --product-name="Office-Backup-Utilities-Config-Editor" --company-name="TonyV2Intl" --product-version="$version" --copyright="Copyright (C) 2026 TonyV2Intl" --onefile --include-data-files="./PythonLight.ico=./PythonLight.ico" --include-module=tkinter --include-module=tkinter.ttk --include-module=tkinter.filedialog --include-module=tkinter.messagebox --msvc=14.0
+        } else {
+          Write-Warning "File $program not found, skipping..."
+        }
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: nuitka-config-editor-packages
+        path: |
+          *.exe
+          *.zip
