@@ -13,8 +13,8 @@ class ConfigEditor:
         # 设置窗口最小尺寸
         self.root.minsize(600, 400)
         
-        # 设置中文字体
-        self.font = ("SimHei", 10)
+        # 使用系统默认字体
+        self.font = None
         
         # 版本配置信息
         self.version_configs = {
@@ -36,7 +36,6 @@ class ConfigEditor:
         }
         
         # 配置数据
-        self.current_version = "5.0"
         self.config_data = {}
         self.original_config = {}
         self.history = []  # 用于撤销/恢复操作
@@ -544,7 +543,6 @@ class ConfigEditor:
                 "ppt_backup_path": "C:\\Officebackup\\pptbckup",
                 "word_backup_path": "C:\\Officebackup\\wordbackup",
                 "interval": 60,
-                "max_skipping_time": 15,
                 "ppt_backup_enable": True,
                 "word_backup_enable": True,
                 "wps_backup_enable": True,
@@ -564,7 +562,6 @@ class ConfigEditor:
                 "ppt_backup_path": "C:\\Officebackup\\pptbckup",
                 "word_backup_path": "C:\\Officebackup\\wordbackup",
                 "interval": 60,
-                "max_skipping_time": 15,
                 "ppt_backup_enable": True,
                 "word_backup_enable": True,
                 "wps_backup_enable": True,

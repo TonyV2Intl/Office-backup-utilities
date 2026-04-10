@@ -4,6 +4,7 @@ import time   #导入time模块，用于时间相关操作
 import win32com.client as win32   #导入win32com.client库，用于通过COM接口与Microsoft Office应用程序交互
 import datetime   #导入datetime库，用于计算备份所用时间
 from collections import defaultdict  #导入collections库的defaultdict方法，用于跟踪单个文件的跳过次数
+import hashlib   #导入hashlib库，用于计算文件MD5值
 
 import json  #导入json库，用于处理配置文件的读写
 import ctypes   #导入ctypes库，用于调用Windows API函数
@@ -17,7 +18,6 @@ default_config = {
     "word_backup_path": "C:\\Officebackup\\wordbackup",   #Word备份路径
     #指定间隔时间，单位为秒
     "interval": 60,   #指定所有操作的轮询时间间隔，单位为秒（默认60秒）
-    "max_skipping_time": 15,   #指定连续跳过次数（默认15次）
     #功能开启或禁用
     "ppt_backup_enable": True,   #PPT备份功能
     "word_backup_enable": True,   #Word备份功能
@@ -70,7 +70,6 @@ SaveAs_method_activated = defaultdict(bool)  # 使用字典记录每个文件是
 Existed_in_this_session = defaultdict(bool)  # 使用字典记录每个文件是否在本次运行中出现过，让之前会话中已经备份过的文件在程序重启后正常进行第一次备份
 #从配置文件读取变量
 sleeptime=config.get('interval')   #轮询间隔（默认为60秒）
-max_skipping_time=config.get('max_skipping_time')   #连续跳过次数（默认为15次）
 ppt_save_folder=config.get('ppt_backup_path')   #ppt备份路径
 word_save_folder=config.get('word_backup_path')   #word备份路径
 
@@ -84,6 +83,20 @@ if config.get('accurate_backup_enable'):  # 检查精确备份功能是否启用
         with open('OBU6.0Core.json', 'w', encoding='utf-8') as f:   #将禁用精确备份功能写入配置文件
                 config['accurate_backup_enable'] = False   #强制禁用精确备份功能
                 json.dump(config, f, indent=4, ensure_ascii=False)   #写入更新后的配置文件
+
+
+
+# 计算文件MD5值的函数
+def calculate_md5(file_path):  # 计算文件的MD5值
+    hash_md5 = hashlib.md5()
+    try:
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                hash_md5.update(chunk)
+        return hash_md5.hexdigest()
+    except Exception as e:
+        log_print('Error calculating MD5 for ' + file_path + ': ' + str(e))
+        return None
 
 
 
@@ -109,13 +122,18 @@ def save_open_ppt_files(ppt_save_folder):   #定义ppt保存函数，参数ppt_s
                 if SaveAs_method_activated[ppt_name] == True:   #如果SaveAs方法已被激活，则不再使用复制方法
                     log_print(ppt_name + ' has already existed in ' + ppt_save_folder + ', skipped backup (SaveAs method activated)')   #打印跳过信息
                     continue   #跳过此次备份
-                if file_skip_count[ppt_name] < max_skipping_time and Existed_in_this_session[ppt_name] == True:  # 仅当同一文件连续跳过规定次数，且在本次会话中出现过时才允许重新备份
-                    file_skip_count[ppt_name] += 1   #该文件的跳过计数器累加
-                    if file_skip_count[ppt_name] == max_skipping_time:   # 如果跳过次数达到规定次数，打印提示信息
-                        log_print(ppt_name + ' has already existed in ' + ppt_save_folder + ', skipped backup (skipped times: ' + str(file_skip_count[ppt_name]) + ', this file will be backed up again during the next request)')   #打印跳过信息
-                    else:
-                        log_print(ppt_name + ' has already existed in ' + ppt_save_folder + ', skipped backup (skipped times: ' + str(file_skip_count[ppt_name]) + ')')   #打印跳过信息
+                
+                # 计算原始文件和备份文件的MD5值
+                original_md5 = calculate_md5(ppt_path)
+                backup_md5 = calculate_md5(new_ppt_path)
+                
+                if original_md5 and backup_md5 and original_md5 == backup_md5:
+                    # MD5值相同，跳过备份
+                    log_print(ppt_name + ' has already existed in ' + ppt_save_folder + ', skipped backup (MD5 match)')   #打印跳过信息
                     continue   #跳过此次备份
+                else:
+                    # MD5值不同，需要备份
+                    log_print(ppt_name + ' has changed, backup will begin soon (MD5 mismatch)')
             
             Existed_in_this_session[ppt_name] = True   #标记该文件在本次会话中出现过
             log_print('Start to backup ' + ppt_name + ' to ' + ppt_save_folder)   #打印备份开始信息
@@ -179,13 +197,18 @@ def save_open_word_files(word_save_folder):   #定义word保存函数，参数wo
                 if SaveAs_method_activated[doc_name] == True:   #如果SaveAs方法已被激活，则不再使用复制方法
                     log_print(doc_name + ' has already existed in ' + word_save_folder + ', skipped backup (SaveAs method activated)')   #打印跳过信息
                     continue   #跳过此次备份
-                if file_skip_count[doc_name] < max_skipping_time and Existed_in_this_session[doc_name] == True:  # 仅当同一文件连续跳过规定次数，且在本次会话中出现过时才允许重新备份
-                    file_skip_count[doc_name] += 1   #该文件的跳过计数器累加
-                    if file_skip_count[doc_name] == max_skipping_time:   # 如果跳过次数达到规定次数，打印提示信息
-                        log_print(doc_name + ' has already existed in ' + word_save_folder + ', skipped backup (skipped times: ' + str(file_skip_count[doc_name]) + ', this file will be backed up again during the next request)')   #打印跳过信息
-                    else:
-                        log_print(doc_name + ' has already existed in ' + word_save_folder + ', skipped backup (skipped times: ' + str(file_skip_count[doc_name]) + ')')   #打印跳过信息
+                
+                # 计算原始文件和备份文件的MD5值
+                original_md5 = calculate_md5(doc_path)
+                backup_md5 = calculate_md5(new_doc_path)
+                
+                if original_md5 and backup_md5 and original_md5 == backup_md5:
+                    # MD5值相同，跳过备份
+                    log_print(doc_name + ' has already existed in ' + word_save_folder + ', skipped backup (MD5 match)')   #打印跳过信息
                     continue   #跳过此次备份
+                else:
+                    # MD5值不同，需要备份
+                    log_print(doc_name + ' has changed, backup will begin soon (MD5 mismatch)')
 
             Existed_in_this_session[doc_name] = True   #标记该文件在本次会话中出现过
             log_print('Start to backup ' + doc_name + ' to ' + word_save_folder)   #打印备份开始信息
@@ -249,13 +272,18 @@ def save_open_WPS_files(ppt_save_folder):   #定义WPS保存函数，参数ppt_s
                 if SaveAs_method_activated[WPS_ppt_name] == True:   #如果SaveAs方法已被激活，则不再使用复制方法
                     log_print(WPS_ppt_name + ' has already existed in ' + ppt_save_folder + ', skipped backup (SaveAs method activated)')   #打印带时间戳和运行次数的跳过信息
                     continue   #跳过此次备份
-                if file_skip_count[WPS_ppt_name] < max_skipping_time and Existed_in_this_session[WPS_ppt_name] == True:  # 仅当同一文件连续跳过规定次数，且在本次会话中出现过时才允许重新备份
-                    file_skip_count[WPS_ppt_name] += 1   #该文件的跳过计数器累加
-                    if file_skip_count[WPS_ppt_name] == max_skipping_time:   # 如果跳过次数达到规定次数，打印提示信息
-                        log_print(WPS_ppt_name + ' has already existed in ' + ppt_save_folder + ', skipped backup (skipped times: ' + str(file_skip_count[WPS_ppt_name]) + ', this file will be backed up again during the next request)')   #打印带时间戳和运行次数的跳过信息
-                    else:
-                        log_print(WPS_ppt_name + ' has already existed in ' + ppt_save_folder + ', skipped backup (skipped times: ' + str(file_skip_count[WPS_ppt_name]) + ')')   #打印带时间戳和运行次数的跳过信息
+                
+                # 计算原始文件和备份文件的MD5值
+                original_md5 = calculate_md5(WPS_ppt_path)
+                backup_md5 = calculate_md5(WPS_new_ppt_path)
+                
+                if original_md5 and backup_md5 and original_md5 == backup_md5:
+                    # MD5值相同，跳过备份
+                    log_print(WPS_ppt_name + ' has already existed in ' + ppt_save_folder + ', skipped backup (MD5 match)')   #打印带时间戳和运行次数的跳过信息
                     continue   #跳过此次备份
+                else:
+                    # MD5值不同，需要备份
+                    log_print(WPS_ppt_name + ' has changed, backup will begin soon (MD5 mismatch)')
 
             Existed_in_this_session[WPS_ppt_name] = True   #标记该文件在本次会话中出现过
             log_print('Start to backup ' + WPS_ppt_name + ' to ' + ppt_save_folder)   #打印备份开始信息
