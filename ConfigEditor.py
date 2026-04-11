@@ -590,7 +590,8 @@ class ConfigEditor:
                 "accurate_backup_source_path": "",
                 "accurate_backup_target_path": "",
                 "show_console_window_at_startup": False,
-                "save_log": True
+                "save_log": True,
+                "archive_previous_log": True
             }
         else:  # 6.0Core
             return {
@@ -603,7 +604,8 @@ class ConfigEditor:
                 "accurate_backup_enable": False,
                 "accurate_backup_source_path": "",
                 "accurate_backup_target_path": "",
-                "save_log": True
+                "save_log": True,
+                "archive_previous_log": True
             }
     
     def _bind_focus_events_recursive(self, widget):
@@ -644,9 +646,9 @@ class ConfigEditor:
         
         # 添加控制台和日志设置（如果适用）
         if self.current_version != "6.0Core":
-            sections["界面与日志"] = ["show_console_window_at_startup", "save_log"]
+            sections["界面与日志"] = ["show_console_window_at_startup", "save_log", "archive_previous_log"]
         else:
-            sections["日志设置"] = ["save_log"]
+            sections["日志设置"] = ["save_log", "archive_previous_log"]
         
         # 为每个分组创建框架
         for section_name, keys in sections.items():
@@ -805,7 +807,8 @@ class ConfigEditor:
             "accurate_backup_source_path": "精确备份源路径",
             "accurate_backup_target_path": "精确备份目标路径",
             "show_console_window_at_startup": "启动时显示控制台",
-            "save_log": "保存日志"
+            "save_log": "保存日志",
+            "archive_previous_log": "归档之前的日志"
         }
         
         if self.key_name_mode == "simple" and key in key_map:
