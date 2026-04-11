@@ -28,7 +28,8 @@ default_config = {
     "accurate_backup_source_path": "",
     "accurate_backup_target_path": "",
     #日志保存设置
-    "save_log": True   #是否保存日志到latest.log文件，True为保存（默认），False为不保存
+    "save_log": True,   #是否保存日志到OBUlatest.log文件，True为保存（默认），False为不保存
+    "archive_previous_log": True   #是否在程序启动时归档之前的日志，True为归档（默认），False为直接覆盖
 }
 try:   #读取配置文件
     with open('OBU6.0Core.json', 'r', encoding='utf-8') as f:   #尝试读取配置文件（只读）
@@ -44,9 +45,15 @@ except (FileNotFoundError, json.JSONDecodeError):   #若配置文件不存在或
 
 
 if config.get('save_log'):   #检查是否启用日志保存功能
-    if os.path.exists('latest.log'):   #如果日志文件存在，则删除旧日志文件
-        os.remove('latest.log')
-    log_file = open('latest.log', 'a', encoding='utf-8')   #以追加模式打开日志文件
+    if os.path.exists('OBUlatest.log'):   #如果日志文件存在
+        if config.get('archive_previous_log'):   #如果启用归档功能
+            # 将旧日志重命名为OBUprevious.log
+            if os.path.exists('OBUprevious.log'):
+                os.remove('OBUprevious.log')
+            os.rename('OBUlatest.log', 'OBUprevious.log')
+        else:   #如果禁用归档功能，直接删除旧日志
+            os.remove('OBUlatest.log')
+    log_file = open('OBUlatest.log', 'a', encoding='utf-8')   #以追加模式打开日志文件
 def log_print(msg):   #定义日志打印函数
     global runid    #声明全局变量runid，以便在函数内修改其值
     runid+=1   #运行计数器累加
