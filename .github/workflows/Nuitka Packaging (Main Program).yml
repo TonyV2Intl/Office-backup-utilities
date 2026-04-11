@@ -33,6 +33,21 @@ jobs:
         python -m pip install --upgrade pip
         pip install -U nuitka==1.9.5
         pip install -r requirements.txt
+
+    - name: Download Dependency Walker manually
+      run: |
+        # Create cache directory for Nuitka
+        $cacheDir = "C:\Users\runneradmin\AppData\Local\Nuitka\Nuitka\Cache\downloads\depends\x86_64"
+        New-Item -ItemType Directory -Path $cacheDir -Force
+        
+        # Download Dependency Walker
+        Invoke-WebRequest -Uri "https://dependencywalker.com/depends22_x64.zip" -OutFile "$cacheDir\depends.zip"
+        
+        # Extract the zip file
+        Expand-Archive -Path "$cacheDir\depends.zip" -DestinationPath $cacheDir -Force
+        
+        # Verify the files exist
+        Get-ChildItem -Path $cacheDir
     
     - name: Package programs with Nuitka
       run: |
