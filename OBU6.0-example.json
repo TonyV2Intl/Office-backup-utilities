@@ -1,8 +1,7 @@
 {
-    "ppt_backup_path": "C:\\Officebackup\\pptbckup",
+    "ppt_backup_path": "C:\\Officebackup\\pptbackup",
     "word_backup_path": "C:\\Officebackup\\wordbackup",
     "interval": 60,
-    "max_skipping_time": 15,
     "ppt_backup_enable": true,
     "word_backup_enable": true,
     "wps_backup_enable": true,
@@ -15,5 +14,6 @@
     "accurate_backup_source_path": "",
     "accurate_backup_target_path": "",
     "show_console_window_at_startup": false,
-    "save_log": true
+    "save_log": true,
+    "archive_previous_log": true
 }
