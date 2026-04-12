@@ -555,7 +555,7 @@ class ConfigEditor:
         # 根据版本返回默认配置
         if self.current_version == "5.0":
             return {
-                "ppt_backup_path": "C:\\Officebackup\\pptbckup",
+                "ppt_backup_path": "C:\\Officebackup\\pptbackup",
                 "word_backup_path": "C:\\Officebackup\\wordbackup",
                 "interval": 60,
                 "max_skipping_time": 15,
@@ -575,7 +575,7 @@ class ConfigEditor:
             }
         elif self.current_version == "6.0":
             return {
-                "ppt_backup_path": "C:\\Officebackup\\pptbckup",
+                "ppt_backup_path": "C:\\Officebackup\\pptbackup",
                 "word_backup_path": "C:\\Officebackup\\wordbackup",
                 "interval": 60,
                 "ppt_backup_enable": True,
@@ -593,9 +593,9 @@ class ConfigEditor:
                 "save_log": True,
                 "archive_previous_log": True
             }
-        else:  # 6.0Core
+        elif self.current_version == "6.0Core":
             return {
-                "ppt_backup_path": "C:\\Officebackup\\pptbckup",
+                "ppt_backup_path": "C:\\Officebackup\\pptbackup",
                 "word_backup_path": "C:\\Officebackup\\wordbackup",
                 "interval": 60,
                 "ppt_backup_enable": True,

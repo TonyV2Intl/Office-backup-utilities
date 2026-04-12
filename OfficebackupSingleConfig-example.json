@@ -1,5 +1,5 @@
 {
-    "ppt_backup_path": "C:\\Officebackup\\pptbckup",
+    "ppt_backup_path": "C:\\Officebackup\\pptbackup",
     "word_backup_path": "C:\\Officebackup\\wordbackup",
     "interval": 60,
     "max_skipping_time": 15,

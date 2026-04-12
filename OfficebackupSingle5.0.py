@@ -20,7 +20,7 @@ import ctypes   #导入ctypes库，用于调用Windows API函数
 #设定默认配置文件
 default_config = {
     #指定备份路径，r表示取原始字符串，需要更改请更改引号内部分
-    "ppt_backup_path": "C:\\Officebackup\\pptbckup",   #PPT、WPS备份路径
+    "ppt_backup_path": "C:\\Officebackup\\pptbackup",   #PPT、WPS备份路径
     "word_backup_path": "C:\\Officebackup\\wordbackup",   #Word备份路径
     #指定间隔时间，单位为秒
     "interval": 60,   #指定所有操作的轮询时间间隔，单位为秒（默认60秒）
