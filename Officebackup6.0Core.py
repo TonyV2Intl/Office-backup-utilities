@@ -8,7 +8,6 @@ import hashlib   #导入hashlib库，用于计算文件MD5值
 
 import json  #导入json库，用于处理配置文件的读写
 import ctypes   #导入ctypes库，用于调用Windows API函数
-import concurrent.futures  #导入concurrent.futures模块，用于添加超时机制
 
 
 
@@ -94,20 +93,28 @@ if config.get('accurate_backup_enable'):  # 检查精确备份功能是否启用
 
 
 
-# 超时装饰器函数
-def timeout(seconds=30):
+# 超时装饰器函数 - 直接在主线程中执行，使用时间检查实现超时
+def timeout(seconds):
     def decorator(func):
         def wrapper(*args, **kwargs):
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(func, *args, **kwargs)
-                try:
-                    return future.result(timeout=seconds)
-                except concurrent.futures.TimeoutError:
-                    log_print(f"Function {func.__name__} timed out after {seconds} seconds")
+            import time
+            start_time = time.time()
+            
+            try:
+                # 直接在主线程中执行函数
+                # 注意：对于长时间运行的操作，这种方法可能会阻塞主线程
+                # 但对于COM接口操作，这是必要的，因为COM接口需要在主线程中使用
+                result = func(*args, **kwargs)
+                
+                # 检查是否超时
+                if time.time() - start_time > seconds:
+                    log_print(f"Function {func.__name__} exceeded timeout of {seconds} seconds")
                     return None
-                except Exception as e:
-                    log_print(f"Error in {func.__name__}: {str(e)}")
-                    return None
+                
+                return result
+            except Exception as e:
+                log_print(f"Error in {func.__name__}: {str(e)}")
+                return None
         return wrapper
     return decorator
 
