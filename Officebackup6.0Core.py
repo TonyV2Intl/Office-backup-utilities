@@ -28,14 +28,21 @@ default_config = {
     "accurate_backup_target_path": "",
     #日志保存设置
     "save_log": True,   #是否保存日志到OBUlatest.log文件，True为保存（默认），False为不保存
-    "archive_previous_log": True   #是否在程序启动时归档之前的日志，True为归档（默认），False为直接覆盖
+    "archive_previous_log": True,   #是否在程序启动时归档之前的日志，True为归档（默认），False为直接覆盖
+    #超时设置
+    "backup_timeout": 60   #备份操作超时时间，单位为秒（默认60秒）
 }
 try:   #读取配置文件
     with open('OBU6.0Core.json', 'r', encoding='utf-8') as f:   #尝试读取配置文件（只读）
         config = json.load(f)
+    config_changed = False
     for key, value in default_config.items():   #如果现有配置文件有缺漏，根据默认配置项自动补全
         if key not in config:
             config[key] = value
+            config_changed = True
+    if config_changed:   #如果配置文件有新增项，写回配置文件
+        with open('OBU6.0Core.json', 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=4, ensure_ascii=False)
 except (FileNotFoundError, json.JSONDecodeError):   #若配置文件不存在或无法解析
     config = default_config   #使用默认配置
     with open('OBU6.0Core.json', 'w', encoding='utf-8') as f:   #在当前目录下根据默认配置文件创建（写入）
@@ -94,11 +101,17 @@ if config.get('accurate_backup_enable'):  # 检查精确备份功能是否启用
 
 
 # 超时装饰器函数 - 直接在主线程中执行，使用时间检查实现超时
-def timeout(seconds):
+def timeout(seconds, config_key=None):
     def decorator(func):
         def wrapper(*args, **kwargs):
             import time
             start_time = time.time()
+            
+            timeout_value = seconds
+            if config_key:
+                timeout_value = config.get(config_key, seconds)
+                if timeout_value is None or timeout_value == "":
+                    timeout_value = seconds
             
             try:
                 # 直接在主线程中执行函数
@@ -107,8 +120,8 @@ def timeout(seconds):
                 result = func(*args, **kwargs)
                 
                 # 检查是否超时
-                if time.time() - start_time > seconds:
-                    log_print(f"Function {func.__name__} exceeded timeout of {seconds} seconds")
+                if time.time() - start_time > timeout_value:
+                    log_print(f"Function {func.__name__} exceeded timeout of {timeout_value} seconds")
                     return None
                 
                 return result
@@ -135,7 +148,7 @@ def calculate_md5(file_path):  # 计算文件的MD5值
 
 
 
-@timeout(seconds=60)  # 添加60秒超时机制
+@timeout(seconds=60, config_key='backup_timeout')  # 添加60秒超时机制
 def save_open_ppt_files(ppt_save_folder):   #定义ppt保存函数，参数ppt_save_folder是备份文件的存储路径
     try:
         if not os.path.exists(ppt_save_folder):   #检查ppt备份目录是否存在
@@ -363,7 +376,7 @@ def save_open_WPS_files(ppt_save_folder):   #定义WPS保存函数，参数ppt_s
 
 
 
-@timeout(seconds=120)  # 添加120秒超时机制（精确备份可能需要更长时间）
+@timeout(seconds=120, config_key='backup_timeout')  # 添加120秒超时机制（精确备份可能需要更长时间）
 def accurate_backup():   #定义精确备份函数
     try:
         if os.path.exists(source_path):   #检查源文件夹是否存在

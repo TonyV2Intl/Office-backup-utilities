@@ -74,7 +74,7 @@ jobs:
         $program = "ConfigEditor.py"
         if (Test-Path $program) {
           Write-Host "Packaging $program with version $version..."
-          python -m nuitka --standalone --follow-imports --python-flag="-S" --main="$program" --remove-output --windows-icon-from-ico="PythonLight.ico" --file-version="$version" --product-name="Office-Backup-Utilities-Config-Editor" --company-name="TonyV2Intl" --product-version="$version" --copyright="Copyright (C) 2026 TonyV2Intl" --onefile --include-data-files="./PythonLight.ico=./PythonLight.ico" --include-module=tkinter --include-module=tkinter.ttk --include-module=tkinter.filedialog --include-module=tkinter.messagebox --msvc=14.0 --disable-console
+          python -m nuitka --standalone --follow-imports --python-flag="-S" --main="$program" --remove-output --windows-icon-from-ico="PythonLight.ico" --file-version="$version" --product-name="Office-Backup-Utilities-Config-Editor" --company-name="TonyV2Intl" --product-version="$version" --copyright="Copyright (C) 2026 TonyV2Intl" --onefile --include-data-files="./PythonLight.ico=./PythonLight.ico" --include-module=tkinter --include-module=tkinter.ttk --include-module=tkinter.filedialog --include-module=tkinter.messagebox --msvc=14.0 --windows-console-mode=disable
         } else {
           Write-Warning "File $program not found, skipping..."
         }
