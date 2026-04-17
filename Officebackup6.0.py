@@ -45,14 +45,23 @@ default_config = {
     #"tray_left_click_behavior": "open_console",   #托盘图标左键点击行为，选项有"open_console"（打开控制台）和"exit_program"（退出程序）（无法生效）
     "show_console_window_at_startup": False,   #程序启动时显示控制台窗口，True为显示，False为隐藏（默认）
     "save_log": True,   #是否保存日志到OBUlatest.log文件，True为保存（默认），False为不保存
-    "archive_previous_log": True   #是否在程序启动时归档之前的日志，True为归档（默认），False为直接覆盖
+    "archive_previous_log": True,   #是否在程序启动时归档之前的日志，True为归档（默认），False为直接覆盖
+    #超时和重试设置
+    "backup_timeout": 60,   #备份操作超时时间，单位为秒（默认60秒）
+    "upload_retry_wait": 30,   #上传重试等待时间，单位为秒（默认30秒）
+    "upload_max_retries": ""   #上传最大重试次数，默认空表示无限次重试
 }
 try:   #读取配置文件
     with open('OBU6.0.json', 'r', encoding='utf-8') as f:   #尝试读取配置文件（只读）
         config = json.load(f)
+    config_changed = False
     for key, value in default_config.items():   #如果现有配置文件有缺漏，根据默认配置项自动补全
         if key not in config:
             config[key] = value
+            config_changed = True
+    if config_changed:   #如果配置文件有新增项，写回配置文件
+        with open('OBU6.0.json', 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=4, ensure_ascii=False)
 except (FileNotFoundError, json.JSONDecodeError):   #若配置文件不存在或无法解析
     config = default_config   #使用默认配置
     with open('OBU6.0.json', 'w', encoding='utf-8') as f:   #在当前目录下根据默认配置文件创建（写入）
@@ -118,19 +127,28 @@ openlist_target_folder = config.get('openlist_target_folder')
 
 def upload_to_openlist_thread():   #在单独线程中执行上传操作
     retry_count = 0
-    max_retries = 3
-    
-    while retry_count < max_retries:
+    max_retries = config.get('upload_max_retries')
+    if max_retries is None or max_retries == "":
+        max_retries = float('inf')  # 无限次重试
+    else:
+        max_retries = int(max_retries)
+
+    upload_retry_wait = config.get('upload_retry_wait', 30)
+    if upload_retry_wait is None or upload_retry_wait == "":
+        upload_retry_wait = 30
+
+    while True:
         # 当队列中有文件且上传功能启用时执行上传
         if not upload_queue or not config.get('upload_to_openlist_enable'):
-            log_print('Upload queue is empty or upload disabled, upload thread exiting', source='openlist')
+            log_print('Upload queue is empty or upload disabled, upload thread exit', source='openlist')
             break
-        
-        log_print('Upload thread started, processing ' + str(len(upload_queue)) + ' files', source='openlist')
+
+        log_print('Upload thread started, processing ' + str(len(upload_queue)) + ' file(s)', source='openlist')
+
         # 复制队列以避免在迭代时修改
         current_queue = list(upload_queue)
         failed_in_this_round = False
-        
+
         for (upload_file, upload_source_path) in current_queue:
             log_print('Start to upload ' + upload_file + ' to OpenList', source='openlist')   #打印上传开始信息
             upload_start_time=datetime.datetime.now()   #记录上传操作开始时间
@@ -146,9 +164,6 @@ def upload_to_openlist_thread():   #在单独线程中执行上传操作
                     # 构造目标文件路径
                     target_file_path = os.path.join(openlist_target_folder, upload_file).replace(os.sep, '/')
                     
-                    # 检查目标文件夹是否存在，不存在则创建
-                    target_folder = os.path.dirname(target_file_path).replace(os.sep, '/')
-                    
                     # 登录
                     login_result = await client.login(user)
                     if login_result:
@@ -157,13 +172,18 @@ def upload_to_openlist_thread():   #在单独线程中执行上传操作
                         log_print('Login to OpenList failed', source='openlist')
                         return False
                     
-                    # 创建目标文件夹
-                    if target_folder and target_folder != '/':
-                        try:
-                            await client.mkdir(target_folder)
-                            log_print('Created target folder: ' + target_folder, source='openlist')
-                        except Exception as e:
-                            log_print('Failed to create target folder: ' + str(e), source='openlist')
+                    # 检查目标文件夹是否有效（使用mkdir测试）
+                    try:
+                        await client.mkdir(openlist_target_folder)
+                        log_print('Target folder validated: ' + openlist_target_folder, source='openlist')
+                    except Exception as e:
+                        # 说明路径无效，禁用上传功能
+                        log_print('Target folder invalid: ' + openlist_target_folder + ', error: ' + str(e), source='openlist')
+                        log_print('Disabling upload function, please check target folder path in config file', source='openlist')
+                        config['upload_to_openlist_enable'] = False
+                        with open('OBU6.0.json', 'w', encoding='utf-8') as f:
+                            json.dump(config, f, indent=4, ensure_ascii=False)
+                        return False
                     
                     # 检查文件是否已存在，存在则删除
                     try:
@@ -173,10 +193,7 @@ def upload_to_openlist_thread():   #在单独线程中执行上传操作
                         log_print('No matching file found in OpenList or delete failed: ' + str(e) + ', upload will continue', source='openlist')
                     
                     # 上传文件
-                    log_print('Starting file upload: ' + upload_file, source='openlist')
-                    log_print('Local file path: ' + upload_source_path, source='openlist')
-                    log_print('Target file path: ' + target_file_path, source='openlist')
-                    log_print('File size: ' + str(os.path.getsize(upload_source_path)) + ' bytes', source='openlist')
+                    log_print('Uploading: ' + upload_file + ', file size: ' + str(round(os.path.getsize(upload_source_path) / 1024, 2)) + ' KB', source='openlist')
                     
                     # 使用 client.upload 方法，添加错误处理
                     try:
@@ -224,17 +241,26 @@ def upload_to_openlist_thread():   #在单独线程中执行上传操作
                 log_print('Upload to OpenList failed: ' + upload_file + ' in ' + str(upload_used_time) + ' s, will retry in next upload', source='openlist')
                 failed_in_this_round = True
         
-        # 检查队列是否还有文件（上传失败的）
-        if upload_queue and failed_in_this_round:
-            retry_count += 1
-            log_print('Upload failed for some files, waiting 30 seconds before retry (' + str(retry_count) + '/' + str(max_retries) + ')', source='openlist')
-            time.sleep(30)  # 等待30秒后重试
-        else:
-            # 所有文件上传成功或队列已空
+        # 处理完当前队列后，检查队列是否为空（所有文件都处理完了）
+        if not upload_queue:
+            log_print('All files uploaded successfully, upload thread exit', source='openlist')
             break
-    
-    if retry_count >= max_retries and upload_queue:
-        log_print('Max retries reached, ' + str(len(upload_queue)) + ' files failed to upload', source='openlist')
+
+        # 检查队列是否还有文件（上传失败的）
+        if failed_in_this_round:
+            retry_count += 1
+            if max_retries != float('inf') and retry_count >= max_retries:
+                # 达到最大重试次数，放弃剩余文件
+                log_print('Max retries reached, ' + str(len(upload_queue)) + ' file(s) failed to upload', source='openlist')
+                break
+            if max_retries == float('inf'):
+                log_print('Some files failed to upload, waiting ' + str(upload_retry_wait) + ' seconds before retry (retry ' + str(retry_count) + ')', source='openlist')
+            else:
+                log_print('Some files failed to upload, waiting ' + str(upload_retry_wait) + ' seconds before retry (' + str(retry_count) + '/' + str(int(max_retries)) + ')', source='openlist')
+            time.sleep(upload_retry_wait)  # 等待后重试
+        else:
+            # 队列非空但没有失败的文件（新添加的文件），继续处理
+            log_print('New files detected in queue, continuing upload', source='openlist')
     
     log_print('Upload thread finished', source='openlist')
 
@@ -247,10 +273,9 @@ def upload_to_openlist():   #启动上传线程
     if upload_queue and ('upload_thread' not in globals() or not upload_thread.is_alive()):
         # 创建并启动上传线程
         upload_thread = threading.Thread(target=upload_to_openlist_thread)
+        log_print('Upload thread starting', source='openlist')
         upload_thread.daemon = True  # 设置为守护线程，随主程序终止而结束
         upload_thread.start()
-        log_print('Upload thread starting', source='openlist')
-
 
 
 if not openlist_url or not openlist_username or not openlist_password:   #检查OpenList配置是否完整
@@ -272,11 +297,17 @@ if config.get('accurate_backup_enable'):  # 检查精确备份功能是否启用
 
 
 # 超时装饰器函数 - 直接在主线程中执行，使用时间检查实现超时
-def timeout(seconds):
+def timeout(seconds, config_key=None):
     def decorator(func):
         def wrapper(*args, **kwargs):
             import time
             start_time = time.time()
+            
+            timeout_value = seconds
+            if config_key:
+                timeout_value = config.get(config_key, seconds)
+                if timeout_value is None or timeout_value == "":
+                    timeout_value = seconds
             
             try:
                 # 直接在主线程中执行函数
@@ -285,8 +316,8 @@ def timeout(seconds):
                 result = func(*args, **kwargs)
                 
                 # 检查是否超时
-                if time.time() - start_time > seconds:
-                    log_print(f"Function {func.__name__} exceeded timeout of {seconds} seconds")
+                if time.time() - start_time > timeout_value:
+                    log_print(f"Function {func.__name__} exceeded timeout of {timeout_value} seconds")
                     return None
                 
                 return result
@@ -364,7 +395,7 @@ def save_open_ppt_files(ppt_save_folder):   #定义ppt保存函数，参数ppt_s
             log_print(f'Successfully backuped {ppt_name} to {ppt_save_folder} in {copy_used_time} s')   #打印备份成功信息
 
             upload_queue.append((ppt_name,new_ppt_path))  # 将文件名和备份路径添加到上传队列
-            upload_to_openlist()  # 启动上传线程
+        upload_to_openlist()  # 启动上传线程
 
         if not any_backup_performed and len(presentations) == 0:   #检查变量值，如果没有可备份PPT，打印此条信息
             log_print('No ppt available now (Normal request)')   #打印运行信息
@@ -394,7 +425,7 @@ def save_open_ppt_files(ppt_save_folder):   #定义ppt保存函数，参数ppt_s
 
 
 
-@timeout(seconds=60)  # 添加60秒超时机制
+@timeout(seconds=60, config_key='backup_timeout')
 def save_open_word_files(word_save_folder):   #定义word保存函数，参数word_save_folder是备份文件的存储路径
     global upload_queue  # 声明全局上传队列变量
     try:
@@ -445,7 +476,7 @@ def save_open_word_files(word_save_folder):   #定义word保存函数，参数wo
             log_print('Successfully backuped ' + doc_name + ' to ' + word_save_folder + ' in ' + str(copy_used_time) +' s')   #打印备份成功信息
 
             upload_queue.append((doc_name,new_doc_path))  # 将文件名和备份路径添加到上传队列
-            upload_to_openlist()  # 启动上传线程
+        upload_to_openlist()  # 启动上传线程
 
         if not any_backup_performed and len(documents) == 0:   #检查变量值，如果没有可备份PPT，打印此条信息
                 log_print('No doc available now')
@@ -547,7 +578,7 @@ def save_open_WPS_files(ppt_save_folder):   #定义WPS保存函数，参数ppt_s
             log_print('Detected access control, activated SaveAs method, successfully backuped ' + WPS_ppt_name + ' to ' + ppt_save_folder + ' in ' + str(saveusedtime) + ' s')   #打印备份成功信息
 
             upload_queue.append((WPS_ppt_name,WPS_new_ppt_path))  # 将文件名和备份路径添加到上传队列
-            upload_to_openlist()  # 启动上传线程  
+        upload_to_openlist()  # 启动上传线程  
     except Exception as e:   #获取其他错误类型
             if type(e).__name__=='com_error':   #捕获无打开的WPS实例而产生的的异常
                 log_print('No ppt available now (WPS application not detected)')   #打印异常信息
@@ -556,7 +587,7 @@ def save_open_WPS_files(ppt_save_folder):   #定义WPS保存函数，参数ppt_s
 
 
 
-@timeout(seconds=120)  # 添加120秒超时机制（精确备份可能需要更长时间）
+@timeout(seconds=120, config_key='backup_timeout')
 def accurate_backup():   #定义精确备份函数
     try:
         if os.path.exists(source_path):   #检查源文件夹是否存在

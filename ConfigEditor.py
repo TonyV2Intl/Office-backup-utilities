@@ -3,12 +3,20 @@ from tkinter import ttk, messagebox, filedialog
 import json
 import os
 import copy
+import ctypes
+
+# 隐藏控制台窗口
+try:
+    console_window = ctypes.windll.kernel32.GetConsoleWindow()
+    ctypes.windll.user32.ShowWindow(console_window, 0)
+except:
+    pass
 
 class ConfigEditor:
     def __init__(self, root):
         self.root = root
         self.root.title("Office Backup Utility Config Editor")
-        self.root.geometry("600x400")
+        self.root.geometry("700x400")
         self.root.resizable(True, True)
         # 设置窗口最小尺寸
         self.root.minsize(600, 400)
@@ -109,6 +117,7 @@ class ConfigEditor:
         self.key_name_button.pack(side=tk.RIGHT, padx=5, fill=tk.Y)
         ttk.Button(button_frame, text="重做(下一步)", command=self.redo, takefocus=False).pack(side=tk.RIGHT, padx=5, fill=tk.Y)
         ttk.Button(button_frame, text="撤销(上一步)", command=self.undo, takefocus=False).pack(side=tk.RIGHT, padx=5, fill=tk.Y)
+        ttk.Button(button_frame, text="恢复默认配置", command=self.reset_to_default_config, takefocus=False).pack(side=tk.RIGHT, padx=5, fill=tk.Y)
         
         # 创建连通性测试界面
         self.create_test_widgets()
@@ -526,10 +535,22 @@ class ConfigEditor:
         config_file = self.version_configs[self.current_version]["config_file"]
         
         try:
+            config_changed = False
             if os.path.exists(config_file):
                 with open(config_file, 'r', encoding='utf-8') as f:
                     self.config_data = json.load(f)
-                self.status_var.set(f"成功加载配置文件: {config_file}")
+                # 检查是否有缺失的配置项
+                default_config = self.get_default_config()
+                for key, value in default_config.items():
+                    if key not in self.config_data:
+                        self.config_data[key] = value
+                        config_changed = True
+                if config_changed:
+                    # 保存补全后的配置
+                    self.save_config_to_file(self.config_data, config_file)
+                    self.status_var.set(f"配置文件已更新，新增了缺失的配置项: {config_file}")
+                else:
+                    self.status_var.set(f"成功加载配置文件: {config_file}")
             else:
                 # 如果文件不存在，使用默认配置
                 self.config_data = self.get_default_config()
@@ -591,7 +612,10 @@ class ConfigEditor:
                 "accurate_backup_target_path": "",
                 "show_console_window_at_startup": False,
                 "save_log": True,
-                "archive_previous_log": True
+                "archive_previous_log": True,
+                "backup_timeout": 60,
+                "upload_retry_wait": 30,
+                "upload_max_retries": ""
             }
         elif self.current_version == "6.0Core":
             return {
@@ -605,7 +629,8 @@ class ConfigEditor:
                 "accurate_backup_source_path": "",
                 "accurate_backup_target_path": "",
                 "save_log": True,
-                "archive_previous_log": True
+                "archive_previous_log": True,
+                "backup_timeout": 60
             }
     
     def _bind_focus_events_recursive(self, widget):
@@ -649,6 +674,12 @@ class ConfigEditor:
             sections["界面与日志"] = ["show_console_window_at_startup", "save_log", "archive_previous_log"]
         else:
             sections["日志设置"] = ["save_log", "archive_previous_log"]
+        
+        # 添加超时和重试设置
+        if self.current_version == "6.0":
+            sections["超时与重试"] = ["backup_timeout", "upload_retry_wait", "upload_max_retries"]
+        else:
+            sections["超时设置"] = ["backup_timeout"]
         
         # 为每个分组创建框架
         for section_name, keys in sections.items():
@@ -763,6 +794,30 @@ class ConfigEditor:
             self.status_var.set("已恢复更改")
             # 自动保存配置
             self.save_config()
+
+    def reset_to_default_config(self):
+        # 确认操作
+        if messagebox.askyesno("确认", "确定要恢复默认配置吗？当前配置将被覆盖。"):
+            # 先把当前配置添加到历史记录，以便撤销
+            self.history = self.history[:self.history_index + 1]
+            self.history.append(copy.deepcopy(self.config_data))
+            self.history_index = len(self.history) - 1
+            if len(self.history) > 50:
+                self.history.pop(0)
+                self.history_index -= 1
+
+            default_config = self.get_default_config()
+            self.config_data = copy.deepcopy(default_config)
+            self.save_config()
+            self.original_config = copy.deepcopy(self.config_data)
+            self.history.append(copy.deepcopy(self.config_data))
+            self.history_index = len(self.history) - 1
+            if len(self.history) > 50:
+                self.history.pop(0)
+                self.history_index -= 1
+            self.unsaved_changes = False
+            self.update_config_ui()
+            self.status_var.set("已恢复默认配置（可撤销）")
     
     def toggle_key_name_mode(self):
         # 切换键名显示模式
@@ -808,7 +863,10 @@ class ConfigEditor:
             "accurate_backup_target_path": "精确备份目标路径",
             "show_console_window_at_startup": "启动时显示控制台",
             "save_log": "保存日志",
-            "archive_previous_log": "归档之前的日志"
+            "archive_previous_log": "归档之前的日志",
+            "backup_timeout": "备份超时时间(秒)",
+            "upload_retry_wait": "上传重试等待(秒)",
+            "upload_max_retries": "上传最大重试次数"
         }
         
         if self.key_name_mode == "simple" and key in key_map:
