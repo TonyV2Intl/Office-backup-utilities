@@ -12,7 +12,7 @@ jobs:
     runs-on: windows-latest
     
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v4
     
     - name: Set up Python (3.8, x64)
       uses: actions/setup-python@v5
@@ -21,7 +21,7 @@ jobs:
         architecture: 'x64'
     
     - name: Cache Python dependencies
-      uses: actions/cache@v5
+      uses: actions/cache@v4
       with:
         path: |
           ~\AppData\Local\pip\Cache
@@ -31,7 +31,7 @@ jobs:
           ${{ runner.os }}-python-
     
     - name: Cache Nuitka dependencies
-      uses: actions/cache@v5
+      uses: actions/cache@v4
       with:
         path: |
           ~\AppData\Local\Nuitka\Nuitka\Cache
