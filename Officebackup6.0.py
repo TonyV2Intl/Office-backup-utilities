@@ -47,7 +47,7 @@ default_config = {
     "save_log": True,   #是否保存日志到OBUlatest.log文件，True为保存（默认），False为不保存
     "archive_previous_log": True,   #是否在程序启动时归档之前的日志，True为归档（默认），False为直接覆盖
     #超时和重试设置
-    "backup_timeout": 60,   #备份操作超时时间，单位为秒（默认60秒）
+    "backup_timeout": 600,   #备份操作超时时间，单位为秒（默认10分钟）
     "upload_retry_wait": 30,   #上传重试等待时间，单位为秒（默认30秒）
     "upload_max_retries": ""   #上传最大重试次数，默认空表示无限次重试
 }
@@ -296,12 +296,14 @@ if config.get('accurate_backup_enable'):  # 检查精确备份功能是否启用
 
 
 
-# 超时装饰器函数 - 直接在主线程中执行，使用时间检查实现超时
+# 超时装饰器函数 - 主线程执行函数，子线程计时
 def timeout(seconds, config_key=None):
     def decorator(func):
         def wrapper(*args, **kwargs):
             import time
-            start_time = time.time()
+            import subprocess
+            import sys
+            import threading
             
             timeout_value = seconds
             if config_key:
@@ -309,20 +311,53 @@ def timeout(seconds, config_key=None):
                 if timeout_value is None or timeout_value == "":
                     timeout_value = seconds
             
+            # 超时标志
+            timeout_occurred = [False]
+            
+            # 计时线程函数
+            def timer_thread():
+                time.sleep(timeout_value)
+                if not timeout_occurred[0]:
+                    timeout_occurred[0] = True
+                    # 先打印超时信息（此时日志文件还未关闭）
+                    log_print(f"Function {func.__name__} exceeded timeout of {timeout_value} seconds, restarting program")
+                    # 关闭日志文件，解除占用
+                    if 'log_file' in globals():
+                        try:
+                            log_file.close()
+                            # 注意：关闭后不要再调用 log_print
+                        except:
+                            pass
+                    # 启动新实例
+                    try:
+                        import os
+                        import sys
+                        import subprocess
+                        # 构建完整的命令
+                        script_path = os.path.abspath(__file__)
+                        command = [sys.executable, script_path]
+                        # 直接启动，不打印日志
+                        subprocess.Popen(command)
+                        time.sleep(1)  # 给新进程启动时间
+                    except:
+                        pass
+                    # 强制退出
+                    os._exit(1)
+            
+            # 启动计时线程
+            timer = threading.Thread(target=timer_thread)
+            timer.daemon = True  # 守护线程，主线程退出时自动退出
+            timer.start()
+            
             try:
-                # 直接在主线程中执行函数
-                # 注意：对于长时间运行的操作，这种方法可能会阻塞主线程
-                # 但对于COM接口操作，这是必要的，因为COM接口需要在主线程中使用
+                # 执行实际函数
                 result = func(*args, **kwargs)
-                
-                # 检查是否超时
-                if time.time() - start_time > timeout_value:
-                    log_print(f"Function {func.__name__} exceeded timeout of {timeout_value} seconds")
-                    return None
-                
+                # 标记执行完成
+                timeout_occurred[0] = True
                 return result
             except Exception as e:
                 log_print(f"Error in {func.__name__}: {str(e)}")
+                timeout_occurred[0] = True
                 return None
         return wrapper
     return decorator
@@ -344,7 +379,7 @@ def calculate_md5(file_path):  # 计算文件的MD5值
 
 
 
-@timeout(seconds=60)  # 添加60秒超时机制
+@timeout(seconds=600, config_key='backup_timeout')  #添加10分钟超时机制
 def save_open_ppt_files(ppt_save_folder):   #定义ppt保存函数，参数ppt_save_folder是备份文件的存储路径
     global upload_queue  # 声明全局上传队列变量
     try:
@@ -425,7 +460,7 @@ def save_open_ppt_files(ppt_save_folder):   #定义ppt保存函数，参数ppt_s
 
 
 
-@timeout(seconds=60, config_key='backup_timeout')
+@timeout(seconds=600, config_key='backup_timeout')   #添加10分钟超时机制
 def save_open_word_files(word_save_folder):   #定义word保存函数，参数word_save_folder是备份文件的存储路径
     global upload_queue  # 声明全局上传队列变量
     try:
@@ -506,7 +541,7 @@ def save_open_word_files(word_save_folder):   #定义word保存函数，参数wo
 
 
 
-@timeout(seconds=60)  # 添加60秒超时机制
+@timeout(seconds=600, config_key='backup_timeout')  #添加10分钟超时机制
 def save_open_WPS_files(ppt_save_folder):   #定义WPS保存函数，参数ppt_save_folder是备份文件的存储路径
     global upload_queue  # 声明全局上传队列变量
     try:
@@ -587,7 +622,7 @@ def save_open_WPS_files(ppt_save_folder):   #定义WPS保存函数，参数ppt_s
 
 
 
-@timeout(seconds=120, config_key='backup_timeout')
+@timeout(seconds=600, config_key='backup_timeout')   #添加10分钟超时机制
 def accurate_backup():   #定义精确备份函数
     try:
         if os.path.exists(source_path):   #检查源文件夹是否存在

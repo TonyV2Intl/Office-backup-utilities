@@ -5,13 +5,6 @@ import os
 import copy
 import ctypes
 
-# 隐藏控制台窗口
-try:
-    console_window = ctypes.windll.kernel32.GetConsoleWindow()
-    ctypes.windll.user32.ShowWindow(console_window, 0)
-except:
-    pass
-
 class ConfigEditor:
     def __init__(self, root):
         self.root = root
@@ -613,7 +606,7 @@ class ConfigEditor:
                 "show_console_window_at_startup": False,
                 "save_log": True,
                 "archive_previous_log": True,
-                "backup_timeout": 60,
+                "backup_timeout": 600,
                 "upload_retry_wait": 30,
                 "upload_max_retries": ""
             }
@@ -630,7 +623,7 @@ class ConfigEditor:
                 "accurate_backup_target_path": "",
                 "save_log": True,
                 "archive_previous_log": True,
-                "backup_timeout": 60
+                "backup_timeout": 600
             }
     
     def _bind_focus_events_recursive(self, widget):
