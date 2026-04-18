@@ -78,7 +78,7 @@ jobs:
         foreach ($program in $programs) {
           if (Test-Path $program) {
             Write-Host "Packaging $program with version $version..."
-            python -m nuitka --standalone --follow-imports --python-flag="-S" --main="$program" --remove-output --windows-icon-from-ico="PythonLight.ico" --file-version="$version" --product-name="Office-Backup-Utilities" --company-name="TonyV2Intl" --product-version="$version" --copyright="Copyright (C) 2026 TonyV2Intl" --onefile --include-data-files="./PythonLight.ico=./PythonLight.ico" --msvc=14.0
+            python -m nuitka --standalone --follow-imports --python-flag="-S" "$program" --remove-output --windows-icon-from-ico="PythonLight.ico" --file-version="$version" --product-name="Office-Backup-Utilities" --company-name="TonyV2Intl" --product-version="$version" --copyright="Copyright (C) 2026 TonyV2Intl" --onefile --include-data-files="./PythonLight.ico=./PythonLight.ico" --msvc=14.0
           } else {
             Write-Warning "File $program not found, skipping..."
           }
