@@ -3,7 +3,6 @@ from tkinter import ttk, messagebox, filedialog
 import json
 import os
 import copy
-import ctypes
 
 class ConfigEditor:
     def __init__(self, root):

@@ -1,20 +1,21 @@
+import win32com.client as win32   #导入win32com.client库，用于通过COM接口与Microsoft Office应用程序交互
+import pystray   #导入pystray库，用于创建系统托盘图标
+from pystray import MenuItem as item   #从pystray库中导入MenuItem类，用于创建托盘菜单项
+from PIL import Image   #导入PIL库的Image模块，用于处理图标图像
+
 import os   #导入os模块，用于处理文件和目录路径操作
 import shutil   #导入shutil模块，用于复制文件并保留元数据
 import time   #导入time模块，用于时间相关操作
-import win32com.client as win32   #导入win32com.client库，用于通过COM接口与Microsoft Office应用程序交互
 import datetime   #导入datetime库，用于计算备份所用时间
 from collections import defaultdict  #导入collections库的defaultdict方法，用于跟踪单个文件的跳过次数
 import hashlib   #导入hashlib库，用于计算文件MD5值
 import sys   #导入sys模块，用于处理系统相关操作
 import traceback   #导入traceback模块，用于获取详细的异常信息
-
 import threading  #导入threading库，用于多线程操作
 import json  #导入json库，用于处理配置文件的读写
-
-import pystray   #导入pystray库，用于创建系统托盘图标
-from pystray import MenuItem as item   #从pystray库中导入MenuItem类，用于创建托盘菜单项
-from PIL import Image   #导入PIL库的Image模块，用于处理图标图像
 import ctypes   #导入ctypes库，用于调用Windows API函数
+import subprocess  #导入subprocess模块，用于启动新进程
+import asyncio  #导入asyncio模块，用于异步操作
 
 
 
@@ -213,7 +214,6 @@ def upload_to_openlist_thread():   #在单独线程中执行上传操作
                     return upload_result
                 
                 # 运行异步上传函数
-                import asyncio
                 upload_result = asyncio.run(async_upload())
                 
                 # 检查上传是否成功
@@ -233,7 +233,6 @@ def upload_to_openlist_thread():   #在单独线程中执行上传操作
                 
             except Exception as e:
                 log_print('Upload to OpenList failed: ' + str(e), source='openlist')
-                import traceback
                 log_print('Traceback: ' + traceback.format_exc(), source='openlist')
                 # 发生错误时，保留文件在队列中，等待下次上传
                 upload_end_time=datetime.datetime.now()   #记录上传操作结束时间
@@ -300,11 +299,6 @@ if config.get('accurate_backup_enable'):  # 检查精确备份功能是否启用
 def timeout(seconds, config_key=None):
     def decorator(func):
         def wrapper(*args, **kwargs):
-            import time
-            import subprocess
-            import sys
-            import threading
-            
             timeout_value = seconds
             if config_key:
                 timeout_value = config.get(config_key, seconds)
@@ -330,9 +324,6 @@ def timeout(seconds, config_key=None):
                             pass
                     # 启动新实例
                     try:
-                        import os
-                        import sys
-                        import subprocess
                         # 构建完整的命令
                         script_path = os.path.abspath(__file__)
                         command = [sys.executable, script_path]
@@ -660,7 +651,6 @@ def on_clicked(icon):   #左键单击事件处理（无法生效）
     elif behavior == 'exit_program':   #退出程序
         exit_program(icon)
 '''
-import sys
 
 try:   #尝试加载图标文件
     # 检查是否在Nuitka打包环境中
