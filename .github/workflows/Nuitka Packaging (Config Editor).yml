@@ -47,7 +47,7 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -U nuitka==4.0.8
+        pip install -U nuitka==1.9.5
         pip install -r requirements.txt
 
     - name: Download Dependency Walker manually
@@ -74,7 +74,7 @@ jobs:
         $program = "ConfigEditor.py"
         if (Test-Path $program) {
           Write-Host "Packaging $program with version $version..."
-          python -m nuitka --standalone --follow-imports --python-flag="-S" "$program" --remove-output --windows-icon-from-ico="PythonLight.ico" --file-version="$version" --product-name="Office-Backup-Utilities-Config-Editor" --company-name="TonyV2Intl" --product-version="$version" --copyright="Copyright (C) 2026 TonyV2Intl" --onefile --include-data-files=./PythonLight.ico=PythonLight.ico --msvc=14.0 --windows-console-mode=disable --enable-plugin=tk-inter
+          python -m nuitka --standalone --follow-imports --python-flag="-S" --main="$program" --remove-output --windows-icon-from-ico="PythonLight.ico" --file-version="$version" --product-name="Office-Backup-Utilities-Config-Editor" --company-name="TonyV2Intl" --product-version="$version" --copyright="Copyright (C) 2026 TonyV2Intl" --onefile --msvc=14.0 --windows-disable-console --enable-plugin=tk-inter
         } else {
           Write-Warning "File $program not found, skipping..."
         }
