@@ -12,7 +12,7 @@ jobs:
     runs-on: windows-latest
     
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     
     - name: Set up Python (3.8, x64)
       uses: actions/setup-python@v5
@@ -21,7 +21,7 @@ jobs:
         architecture: 'x64'
     
     - name: Cache Python dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           ~\AppData\Local\pip\Cache
@@ -31,7 +31,7 @@ jobs:
           ${{ runner.os }}-python-
     
     - name: Cache Nuitka dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           ~\AppData\Local\Nuitka\Nuitka\Cache
@@ -47,7 +47,7 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -U nuitka==1.9.5
+        pip install -U nuitka==4.0.8
         pip install -r requirements.txt
 
     - name: Download Dependency Walker manually
@@ -74,15 +74,13 @@ jobs:
         $program = "ConfigEditor.py"
         if (Test-Path $program) {
           Write-Host "Packaging $program with version $version..."
-          python -m nuitka --standalone --follow-imports --python-flag="-S" --main="$program" --remove-output --windows-icon-from-ico="PythonLight.ico" --file-version="$version" --product-name="Office-Backup-Utilities-Config-Editor" --company-name="TonyV2Intl" --product-version="$version" --copyright="Copyright (C) 2026 TonyV2Intl" --onefile --include-data-files="./PythonLight.ico=./PythonLight.ico" --include-module=tkinter --include-module=tkinter.ttk --include-module=tkinter.filedialog --include-module=tkinter.messagebox --msvc=14.0 --windows-disable-console
+          python -m nuitka --standalone --follow-imports --python-flag="-S" --main="$program" --remove-output --windows-icon-from-ico="PythonLight.ico" --file-version="$version" --product-name="Office-Backup-Utilities-Config-Editor" --company-name="TonyV2Intl" --product-version="$version" --copyright="Copyright (C) 2026 TonyV2Intl" --onefile --include-data-files=./PythonLight.ico=PythonLight.ico --msvc=14.0 --windows-console-mode=disable --enable-plugin=tk-inter --show-memory --show-progress
         } else {
           Write-Warning "File $program not found, skipping..."
         }
     
     - name: Upload artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
-        name: nuitka-config-editor-packages
-        path: |
-          *.exe
-          *.zip
+        path: ConfigEditor.exe
+        archive: false
