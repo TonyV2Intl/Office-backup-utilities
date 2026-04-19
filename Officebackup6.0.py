@@ -653,13 +653,13 @@ def on_clicked(icon):   #左键单击事件处理（无法生效）
 '''
 
 try:   #尝试加载图标文件
-    # 检查是否在Nuitka打包环境中
+    '''# 检查是否在Nuitka打包环境中
     if hasattr(sys, '_MEIPASS'):
         # 在Nuitka打包环境中，使用临时解压目录
         icon_path = os.path.join(sys._MEIPASS, 'PythonLight.ico')
     else:
-        # 在正常环境中，使用相对路径
-        icon_path = 'PythonLight.ico'
+        # 在正常环境中，使用相对路径'''
+    icon_path = 'PythonLight.ico'
     
     image = Image.open(icon_path)   #图标文件路径
 except FileNotFoundError:
