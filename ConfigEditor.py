@@ -8,10 +8,10 @@ class ConfigEditor:
     def __init__(self, root):
         self.root = root
         self.root.title("Office Backup Utility Config Editor")
-        self.root.geometry("700x400")
+        self.root.geometry("700x450")
         self.root.resizable(True, True)
         # 设置窗口最小尺寸
-        self.root.minsize(600, 400)
+        self.root.minsize(700, 450)
         
         # 使用系统默认字体
         self.font = None
@@ -102,7 +102,7 @@ class ConfigEditor:
         button_frame.pack(side=tk.RIGHT, padx=5, pady=5, fill=tk.Y)
         
         # 其他按钮
-        ttk.Button(button_frame, text="启动", command=self.start_program, takefocus=False,width=5).pack(side=tk.RIGHT, padx=5, fill=tk.Y)
+        ttk.Button(button_frame, text="一键启动", command=self.start_program, takefocus=False, width=10).pack(side=tk.RIGHT, padx=5, fill=tk.Y)
         # 键名显示模式切换按钮
         initial_text = "切换到原始键名" if self.key_name_mode == "simple" else "切换到简明键名"
         self.key_name_button = ttk.Button(button_frame, text=initial_text, command=self.toggle_key_name_mode, takefocus=False)
@@ -875,25 +875,42 @@ class ConfigEditor:
         
         # 根据版本确定程序文件
         program_files = {
-            "5.0": "OfficebackupSingle5.0.py",
-            "6.0": "Officebackup6.0.py",
-            "6.0Core": "Officebackup6.0Core.py"
+            "5.0": "OfficebackupSingle5.0",
+            "6.0": "Officebackup6.0",
+            "6.0Core": "Officebackup6.0Core"
         }
         
         if version in program_files:
-            program_file = program_files[version]
-            if os.path.exists(program_file):
-                # 启动程序
+            base_name = program_files[version]
+            # 优先尝试启动 py 文件
+            py_file = f"{base_name}.py"
+            if os.path.exists(py_file):
+                # 启动 py 文件
                 try:
                     import subprocess
-                    subprocess.Popen(["python", program_file])
+                    subprocess.Popen(["python", py_file])
+                    self.status_var.set(f"已启动{version}版本程序")
+                    messagebox.showinfo("成功", f"已启动{version}版本程序")
+                    return
+                except Exception as e:
+                    messagebox.showerror("错误", f"启动程序失败: {str(e)}")
+                    self.status_var.set("启动程序失败")
+                    return
+            
+            # 如果 py 文件不存在，尝试启动 exe 文件
+            exe_file = f"{base_name}.exe"
+            if os.path.exists(exe_file):
+                # 启动 exe 文件
+                try:
+                    import subprocess
+                    subprocess.Popen([exe_file])
                     self.status_var.set(f"已启动{version}版本程序")
                     messagebox.showinfo("成功", f"已启动{version}版本程序")
                 except Exception as e:
                     messagebox.showerror("错误", f"启动程序失败: {str(e)}")
                     self.status_var.set("启动程序失败")
             else:
-                messagebox.showerror("错误", f"程序文件不存在: {program_file}")
+                messagebox.showerror("错误", f"程序文件不存在: {py_file} 或 {exe_file}")
                 self.status_var.set("程序文件不存在")
         else:
             messagebox.showerror("错误", "无效的版本")

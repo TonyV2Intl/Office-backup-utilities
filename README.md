@@ -6,6 +6,15 @@ The source code is open to the public under the MIT license and is fully annotat
 <br>
 <br>
 <br>
+在命令行中执行以下命令安装依赖：
+```
+pip install -U Pillow pystray pywin32 alist3==1.3.1 svglib rlpycairo
+```
+
+或使用requirements.txt安装所有依赖：
+```
+pip install -r requirements.txt
+```
 **稳定版本：5.0（推荐，最新，3软件备份功能合一，可对接网盘）、4.2（推荐，经过长期测试 运行稳定，shutil.copy2为主，SaveAs备用）或2.0（SaveAs，有实时备份修改内容的需求可尝试使用，但未经过测试）**<br>
 pptbackup的WPS版本**只支持WPS专业版**，**官网最新个人版不可用**，WPS2019教育考试专用版经实测可用，可至 https://hellowindows.cn/ 中的Office/WPS分区下载，来自此网站的WPS2019教育考试专用版123云盘链接：https://www.123pan.com/s/ZrzA-2UZgh<br>
 wordbackup**不支持WPS**，后续也没有支持计划（会抛出attribute error异常）<br>
