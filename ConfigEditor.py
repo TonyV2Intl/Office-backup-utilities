@@ -921,11 +921,5 @@ class ConfigEditor:
 
 if __name__ == "__main__":
     root = tk.Tk()
-    
-    try:
-        root.iconbitmap(default='PythonLight.ico')
-    except:
-        pass
-    
     app = ConfigEditor(root)
     root.mainloop()

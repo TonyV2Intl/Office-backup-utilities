@@ -16,11 +16,11 @@ import threading  #导入threading模块，用于多线程操作
 
 #设定默认配置文件
 default_config = {
-    #指定备份路径，r表示取原始字符串，需要更改请更改引号内部分
+    #指定备份路径，注意路径中的反斜杠需要转义
     "ppt_backup_path": "C:\\Officebackup\\pptbackup",   #PPT、WPS备份路径
     "word_backup_path": "C:\\Officebackup\\wordbackup",   #Word备份路径
-    #指定间隔时间，单位为秒
-    "interval": 60,   #指定所有操作的轮询时间间隔，单位为秒（默认60秒）
+    #指定轮询间隔
+    "interval": 60,   #指定执行完一轮操作后等待的时间间隔，单位为秒（默认60秒）
     #功能开启或禁用
     "ppt_backup_enable": True,   #PPT备份功能
     "word_backup_enable": True,   #Word备份功能
@@ -31,7 +31,7 @@ default_config = {
     "accurate_backup_target_path": "",
     #日志保存设置
     "save_log": True,   #是否保存日志到OBUlatest.log文件，True为保存（默认），False为不保存
-    "archive_previous_log": True,   #是否在程序启动时归档之前的日志，True为归档（默认），False为直接覆盖
+    "archive_previous_log": True,   #是否在程序启动时归档之前的日志（重命名为OBUprevious.log），True为归档（默认），False为直接覆盖
     #超时设置
     "backup_timeout": 600,   #备份操作超时时间，单位为秒（默认10分钟）
 }

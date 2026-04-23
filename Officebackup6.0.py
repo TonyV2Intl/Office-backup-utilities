@@ -23,11 +23,11 @@ import asyncio  #导入asyncio模块，用于异步操作
 
 #设定默认配置文件
 default_config = {
-    #指定备份路径，r表示取原始字符串，需要更改请更改引号内部分
+    #指定备份路径，注意路径中的反斜杠需要转义
     "ppt_backup_path": "C:\\Officebackup\\pptbackup",   #PPT、WPS备份路径
     "word_backup_path": "C:\\Officebackup\\wordbackup",   #Word备份路径
-    #指定间隔时间，单位为秒
-    "interval": 60,   #指定所有操作的轮询时间间隔，单位为秒（默认60秒）
+    #指定轮询间隔
+    "interval": 60,   #指定执行完一轮操作后等待的时间间隔，单位为秒（默认60秒）
     #功能开启或禁用
     "ppt_backup_enable": True,   #PPT备份功能
     "word_backup_enable": True,   #Word备份功能
@@ -46,11 +46,11 @@ default_config = {
     #"tray_left_click_behavior": "open_console",   #托盘图标左键点击行为，选项有"open_console"（打开控制台）和"exit_program"（退出程序）（无法生效）
     "show_console_window_at_startup": False,   #程序启动时显示控制台窗口，True为显示，False为隐藏（默认）
     "save_log": True,   #是否保存日志到OBUlatest.log文件，True为保存（默认），False为不保存
-    "archive_previous_log": True,   #是否在程序启动时归档之前的日志，True为归档（默认），False为直接覆盖
+    "archive_previous_log": True,   #是否在程序启动时归档之前的日志（重命名为OBUprevious.log），True为归档（默认），False为直接覆盖
     #超时和重试设置
     "backup_timeout": 600,   #备份操作超时时间，单位为秒（默认10分钟）
     "upload_retry_wait": 30,   #上传重试等待时间，单位为秒（默认30秒）
-    "upload_max_retries": ""   #上传最大重试次数，默认空表示无限次重试
+    "upload_max_retries": ""   #上传最大重试次数，默认为空，表示无限次重试
 }
 try:   #读取配置文件
     with open('OBU6.0.json', 'r', encoding='utf-8') as f:   #尝试读取配置文件（只读）
@@ -277,8 +277,8 @@ def upload_to_openlist():   #启动上传线程
         upload_thread.start()
 
 
-if not openlist_url or not openlist_username or not openlist_password:   #检查OpenList配置是否完整
-    log_print('OpenList URL, username or password is empty, force disabled upload function, please provide valid credentials in the configuration file')
+if not openlist_url or not openlist_username or not openlist_password or not openlist_target_folder:   #检查OpenList配置是否完整
+    log_print('OpenList URL, username, password or target folder is empty, force disabled upload function, please provide valid credentials in the configuration file')
     config['upload_to_openlist_enable'] = False   #强制禁用上传功能
 else:
     # 启动上传线程
