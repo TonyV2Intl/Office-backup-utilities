@@ -1,3 +1,5 @@
+[OBU] Office Backup Utilities
+====
 **一个用来备份当前打开的PPT和Word文档并上传网盘的Python小程序**<br>
 **A Python-based mini program for backing up currently opened PPT and Word documents and uploading them to cloud drives**<br>
 <br>
@@ -181,3 +183,6 @@ ws.run "C:\pptbackup4.0.py",vbhide
 **2025-10-31晚（5.0实装测试后改进）** <br>
 **2025-11-01凌晨（5.0发布）** <br>
 ·修复了开机自启后程序无法第一时间联网获取云盘token、标记token_aquired=False时出现的逻辑问题，**确保在任何情况下token_aquired和acccess_token变量都有定义**，避免在上传函数内第二次获取token时出现变量未定义错误导致程序直接终止
+<!--stackedit_data:
+eyJoaXN0b3J5IjpbMjA0ODU4OTk0MV19
+-->
