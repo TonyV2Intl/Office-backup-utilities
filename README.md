@@ -1,109 +1,57 @@
 [OBU] Office Backup Utilities
 ====
-**一个用来备份当前打开的PPT和Word文档并上传网盘的Python小程序**<br>
-**A Python-based mini program for backing up currently opened PPT and Word documents and uploading them to cloud drives**<br>
-<br>
-源代码以MIT协议公开，全部有注释，欢迎研究与改进<br>
-The source code is open to the public under the MIT license and is fully annotated. Study and modifications are welcome.<br>
-<br>
-<br>
-<br>
-在命令行中执行以下命令安装依赖：
-```
-pip install -U Pillow pystray pywin32 alist3==1.3.1 svglib rlpycairo
-```
 
-或使用requirements.txt安装所有依赖：
-```
-pip install -r requirements.txt
-```
-**稳定版本：5.0（推荐，最新，3软件备份功能合一，可对接网盘）、4.2（推荐，经过长期测试 运行稳定，shutil.copy2为主，SaveAs备用）或2.0（SaveAs，有实时备份修改内容的需求可尝试使用，但未经过测试）**<br>
-pptbackup的WPS版本**只支持WPS专业版**，**官网最新个人版不可用**，WPS2019教育考试专用版经实测可用，可至 https://hellowindows.cn/ 中的Office/WPS分区下载，来自此网站的WPS2019教育考试专用版123云盘链接：https://www.123pan.com/s/ZrzA-2UZgh<br>
-wordbackup**不支持WPS**，后续也没有支持计划（会抛出attribute error异常）<br>
-<br>
-**5.0更新内容：** <br>
-**·新增自动上传至网盘功能（使用第三方pan123库），目前支持123云盘**，可以自行修改相关源码以适配其他网盘<br>
-·将PPT、Word、WPS三个软件的备份功能整合到单个程序内，~~引入内建Threading库多线程功能，三个软件的备份、网盘上传和托盘图标分布在5个独立子线程中；将死循环和异常处理都移动到了各线程内部，保证持续运行；三个备份功能与上传功能之间均有1秒钟间隔（注：不能通过在控制台Ctrl+C结束程序，因为KeyboardInterrupt只能结束主线程，而所有功能都分布在不同的子线程中）~~（目前多线程版本有Bug，在主线程结束后子线程内无法捕获到PPT与Word实例，故没有添加至Release，可至仓库内OfficebackupMulti5.0 (Not in use).py查看；Release中的OfficebackupSingle5.0则是将所有函数放到死循环中顺序执行）<br>
-**·新增通过json文件修改配置功能（使用内建json库）**，支持自动创建与补全，替代了原先的硬编码方式；配置文件包括：备份路径、轮询间隔、功能开关、网盘API对接、托盘图标左键行为设置）<br>
-**·默认隐藏控制台窗口（使用内建ctypes库）**，不再需要vbs脚本隐藏，可以在配置文件内修改默认行为（仅Win7、Win10可隐藏命令行窗口，Win11只能最小化到任务栏）<br>
-**·新增托盘图标（使用内建pystray库）**，右键图标能弹出菜单，可以隐藏/显示控制台窗口或退出程序<br>
-**·新增日志存储功能**，会在程序运行目录下创建latest.log（是纯文本文件，可用任意文本编辑器打开，如记事本），所有在命令行中print的内容将会通过log_file.write()方法自动写入文件保存，**每次启动程序都会自动删除同目录下已有的latest.log文件，如需保存请在程序重新运行前将旧的日志文件重命名或移动到其他目录**；同时**改进了日志输出逻辑**，将所有日志信息传入到新定义的log_print()函数中，**统一进行时间戳追加、写入.log文件等操作**<br>
-<br>
-<br>
-<br>
-<br>
-<br>
-**5.0版本使用方法：**<br>
-1.下载Release中的OfficebackupSingle5.0.exe与PythonLight.ico，放在同一目录下（若不下载图标，托盘图标将设置为一个白色方块；此exe程序使用nuitka打包，支持Windows7及以上系统）<br>
-2.下载OfficebackupSingleConfig.json（或运行一次程序，此配置文件将自动生成），按需修改其中的值：<br>
-```
+**一个用来备份当前打开的PPT和Word文档并上传到云存储的Python小程序**  
+**A Python-based mini program for backing up currently opened Powerpoint & Word documents and uploading them to cloud storage.**  
+  
+源代码以MIT协议公开，全部有注释，欢迎研究、交流与改进  
+The source code is open under the MIT license and is fully annotated. Study, communications and modifications are welcome.  
+  
+**稳定版本：6.0（推荐，最新，功能全面）或4.2（经过长期测试，运行稳定，依赖项少）**  
+> [!IMPORTANT]
+> WPS的备份功能**理论上只支持WPS专业版，个人版不可用（除非劫持了Powerpoint的COM接口）**，且**只能备份PPT，不能备份Word**，WPS2019教育考试专用版经实测可用，可至<https://hellowindows.cn>中的Office/WPS分区下载，来自此网站的WPS2019教育考试专用版123云盘链接：<https://www.123pan.com/s/ZrzA-2UZgh>
+
+## 使用方法
+
+### 6.0版本
+
+1.下载Release中的Officebackup6.0.exe（支持Windows7及以上系统）  
+2.下载ConfigEditor.exe，在上方选择6.0版本，按需修改配置项  
+若要启用Openlist上传功能，必须填入Openlist相关的4个参数，程序启动时将校验参数完整性，否则将强制禁用Openlist上传功能
+
+```json
 {
-    #指定备份路径，r表示取原始字符串，需要更改请更改引号内部分
-    "ppt_backup_path": "C:\\Officebackup\\pptbckup",   #PPT、WPS备份路径
-    "word_backup_path": "C:\\Officebackup\\wordbackup",   #Word备份路径
+    "ppt_backup_path": "C:\\Officebackup\\pptbackup",
+    "word_backup_path": "C:\\Officebackup\\wordbackup",
 
-    #指定间隔时间，单位为秒
-    "interval": 60,   #指定所有操作的轮询时间间隔，单位为秒（默认60秒）
-    "max_skipping_time": 15,   #指定连续跳过次数（默认15次）
+    "interval": 60,
 
-    #功能开启或禁用
-    "ppt_backup_enable": True,   #PPT备份功能
-    "word_backup_enable": True,   #Word备份功能
-    "wps_backup_enable": True,   #WPS备份功能
-    "upload_to_123pan_enable": True,   #上传到123云盘功能
+    "ppt_backup_enable": true,
+    "word_backup_enable": true,
+    "wps_backup_enable": true,
+    "upload_to_openlist_enable": true,
 
-    #123云盘参数
-    "client_id": "",   #123云盘API用户ID
-    "client_secret": "",   #123云盘API用户密钥
-    "access_token": "",   #123云盘访问令牌，程序会自动获取并写入
-    "folder_id": 0,   #目标文件夹ID，可以从浏览器地址栏获取，根目录用0表示
+    "openlist_url": "",
+    "openlist_username": "",
+    "openlist_password": "",
+    "openlist_target_folder": "",
 
-    #文件夹精确备份功能
-    "accurate_backup_enable": False,
+    "accurate_backup_enable": false,
     "accurate_backup_source_path": "",
     "accurate_backup_target_path": "",
 
-    #托盘图标、控制台行为与日志保存设置
-    #"tray_left_click_behavior": "open_console",   #托盘图标左键点击行为，选项有"open_console"（打开控制台）和"exit_program"（退出程序）（无法生效）
-    "show_console_window_at startup": False,   #程序启动时显示控制台窗口，True为显示，False为隐藏（默认）
-    "save_log": True   #是否保存日志到latest.log文件，True为保存（默认），False为不保存
+    "show_console_window_at_startup": false,
+    "save_log": true,
+    "archive_previous_log": true,
+
+    "backup_timeout": 600,
+    "upload_retry_wait": 30,
+    "upload_max_retries": ""
 }
 ```
-3.（可选）把源码放在某个隐蔽的角落，右键创建一个快捷方式，按win+r打开运行框，输入shell:startup，这个文件夹是Windows启动项的文件夹，把快捷方式丢进去就可以实现开机自动以最小化窗口运行**（不能直接将程序放在此文件夹中，否则不生效）**<br>
-4.（可选，不建议）如果想要完全静默运行，不弹出托盘图标，新建一个文本文档，输入以下代码，其中引号部分要换成Python文件的路径（Windows10/11可以直接右键，点复制文件路径）：<br>
-```
-Set ws = CreateObject("Wscript.Shell")
-ws.run "OfficebackupSingle5.0.exe",vbhide
-```
-保存退出，将文件后缀名由.txt改为.vbs，弹出提示框确认更改；最后与第3步一样，为VBS文件创建快捷方式，放到shell:startup文件夹内<br>
-此种方式若需要停止程序运行，只能到任务管理器中结束所有Python相关进程，不方便监控程序运行情况，请酌情使用<br>
-<br>
-**123云盘API对接方式：**<br>
-1.如果没有123云盘账号，访问https://www.123pan.cn/ 或 https://www.123pan.com/ ，使用手机号注册123云盘账号<br>
-2.登录云盘，点击页面右上角头像，进入个人中心<br>
-3.复制个人账号ID，备用<br>
-4.访问https://www.123pan.cn/developer （或通过主界面右下角 工具中心-开发者工具-开放平台 进入），勾选并点击“我已阅读并同意，下一步”<br>
-5.填写相关信息：<br>
-123云盘账号（手机号）：刚刚注册/登录用的手机号<br>
-**云盘UID：刚刚复制的个人账号ID**<br>
-邮箱：稍后API密钥将发送到这个邮箱<br>
-**对接123云盘OpenAPI的应用场景简述：我的产品是一个自动备份文档的小程序，帮助用户定期备份文档，防止数据丢失。希望对接123云盘实现文档自动上传服务<br>
-目标用户简述：有文档备份需求的用户**<br>
-对接的产品或服务是否已上线：是/否均可<br>
-6.审核通过后（基本上是1分钟内秒过，不用等待很久），检查填写的邮箱，API密钥应该会发送到邮箱中<br>
-<br>
-<br>
-<br>
-**操作过程图片：**<br>
-<img width="563" height="379" alt="image" src="https://github.com/user-attachments/assets/15d63508-af87-4bd6-bf82-49d9074fd55e" />
-<img width="589" height="791" alt="image" src="https://github.com/user-attachments/assets/a2a80e9f-c111-45e1-84ca-196197462875" />
-<img width="1239" height="963" alt="image" src="https://github.com/user-attachments/assets/38a9449c-55ab-4aea-9fe9-9c372912c5ac" />
-<img width="730" height="1295" alt="image" src="https://github.com/user-attachments/assets/26fd34ac-dacf-4fff-890e-ed5d00a07ea8" />
-<img width="2125" height="601" alt="image" src="https://github.com/user-attachments/assets/b02263c2-5f5a-4ae4-b9bc-9da9e9cdf6c9" />
-<br>
-<br>
-<br>
-<br>
+
+3.（可选）把源码放在某个隐蔽的角落，右键创建一个快捷方式，按win+r打开运行框，输入shell:startup，这个文件夹是Windows启动项的文件夹，把快捷方式丢进去就可以实现开机自动以最小化窗口运行（不能直接将程序放在此文件夹中，无法生效）  
+  
 <br>
 **​4.2版本使用方法：**<br>
 A：直接下载exe文件，无需安装Python环境或运行库即可运行，但只能使用默认的备份路径（"C:\pptbackup"或"C:\wordbackup"）和轮询周期（180秒），无法修改，需要修改路径请使用B方法<br>
@@ -120,10 +68,17 @@ ws.run "C:\pptbackup4.0.py",vbhide
 <br>
 <br>
 <br>
-<br>
-<br>
-做这个程序是因为之前有这样的烦恼：老师一下课就把PPT关掉，U盘拔走，上课没记完的笔记就没法再补了，以后老师也不一定会把PPT公开。所以就想写一个程序，能自动将打开的PPT存到本地，最好是后台静默运行而不是通过模拟点击来实现，不然会~~被老师发现~~打扰老师上课，于是这个程序就应运而生了。它能自动识别打开的PPT或Word文档，并将其保存至指定路径<br>
-<br>
+在命令行中执行以下命令安装依赖：
+```
+pip install -U pywin32 Pillow pystray alist3==1.3.1
+```
+或使用requirements.txt安装所有依赖：
+```
+pip install -r requirements.txt
+```
+  
+做这个程序是因为之前有这样的烦恼：老师一下课就把PPT关掉，U盘拔走，上课没记完的笔记就没法再补了，以后老师也不一定会把PPT公开。所以就想写一个程序，能自动将打开的PPT存到本地，最好是后台静默运行而不是通过模拟点击来实现，不然会~~被老师发现~~打扰老师上课，于是这个程序就应运而生了————它能自动识别打开的PPT或Word文档，并将其保存至指定路径<br>
+  
 **使用此程序前请注意，老师的课件都有知识产权，倾注了每个老师的心血，在自己的班级内与同学分享是可以的，但是请不要外传，因使用不当而导致的后果请自行承担**<br>
 <br>
 3.0版及以上程序的基本原理：使用win32com.client库，通过COM接口与Office应用程序交互，获取文件路径，再使用shutil库进行文件的复制操作（所以3.0版及以上程序只能备份已保存的文件，正在编辑中的部分无法保存，2.0版程序使用的是SaveAs方法，也许可以进行实时备份，请自行测试）<br>
@@ -183,6 +138,3 @@ ws.run "C:\pptbackup4.0.py",vbhide
 **2025-10-31晚（5.0实装测试后改进）** <br>
 **2025-11-01凌晨（5.0发布）** <br>
 ·修复了开机自启后程序无法第一时间联网获取云盘token、标记token_aquired=False时出现的逻辑问题，**确保在任何情况下token_aquired和acccess_token变量都有定义**，避免在上传函数内第二次获取token时出现变量未定义错误导致程序直接终止
-<!--stackedit_data:
-eyJoaXN0b3J5IjpbMjA0ODU4OTk0MV19
--->
