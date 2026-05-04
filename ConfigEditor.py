@@ -356,7 +356,7 @@ class ConfigEditor:
     
     def test_cloud_connection(self):
         """测试云盘连通性"""
-        # 记录开始时间
+        import threading
         import time
         start_time = time.time()
         
@@ -364,15 +364,19 @@ class ConfigEditor:
         for widget in self.conn_test_results_frame.winfo_children():
             widget.destroy()
         
+        # 先显示正在测试的提示
+        ttk.Label(self.conn_test_results_frame, text="正在测试连通性...", foreground="blue").pack(anchor=tk.W, padx=5, pady=2)
+        
         # 获取当前选择的版本
         version = self.test_version_var.get()
         if not version:
-            ttk.Label(self.conn_test_results_frame, text="请先选择版本", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
-            # 计算测试用时
-            end_time = time.time()
-            elapsed_time = end_time - start_time
-            # 显示测试用时
-            ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
+            def show_no_version():
+                for widget in self.conn_test_results_frame.winfo_children():
+                    widget.destroy()
+                ttk.Label(self.conn_test_results_frame, text="请先选择版本", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+                elapsed_time = time.time() - start_time
+                ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
+            self.root.after(0, show_no_version)
             return
         
         # 加载配置文件
@@ -382,109 +386,215 @@ class ConfigEditor:
                 with open(config_file, 'r', encoding='utf-8') as f:
                     config = json.load(f)
             else:
-                ttk.Label(self.conn_test_results_frame, text=f"配置文件 {config_file} 不存在", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
-                # 计算测试用时
-                end_time = time.time()
-                elapsed_time = end_time - start_time
-                # 显示测试用时
-                ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
+                def show_no_config():
+                    for widget in self.conn_test_results_frame.winfo_children():
+                        widget.destroy()
+                    ttk.Label(self.conn_test_results_frame, text=f"配置文件 {config_file} 不存在", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+                    elapsed_time = time.time() - start_time
+                    ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
+                self.root.after(0, show_no_config)
                 return
         except Exception as e:
-            ttk.Label(self.conn_test_results_frame, text=f"加载配置文件失败: {str(e)}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
-            # 计算测试用时
-            end_time = time.time()
-            elapsed_time = end_time - start_time
-            # 显示测试用时
-            ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
+            def show_load_error():
+                for widget in self.conn_test_results_frame.winfo_children():
+                    widget.destroy()
+                ttk.Label(self.conn_test_results_frame, text=f"加载配置文件失败: {str(e)}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+                elapsed_time = time.time() - start_time
+                ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
+            self.root.after(0, show_load_error)
             return
         
-        # 测试 123 云盘 (版本 5.0)
-        if version == "5.0":
-            client_id = config.get("client_id")
-            client_secret = config.get("client_secret")
-            access_token = config.get("access_token")
+        # 在后台线程中执行测试
+        def run_test_in_thread():
+            results = []
             
-            if not client_id or not client_secret or not access_token:
-                ttk.Label(self.conn_test_results_frame, text="123云盘参数不完整", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
-            else:
-                # 测试 123 云盘连通性
-                try:
-                    import requests
-                    # 简单测试 token 是否有效
-                    url = "https://open.123pan.com/api/v1/file/list"
-                    headers = {
-                        "Authorization": f"Bearer {access_token}"
-                    }
-                    response = requests.get(url, headers=headers, timeout=10)
-                    if response.status_code == 200:
-                        # 登录测试成功，打印详细信息
-                        result_frame = ttk.LabelFrame(self.conn_test_results_frame, text="123云盘: 连通性测试成功")
-                        result_frame.pack(fill=tk.X, padx=5, pady=2)
-                        ttk.Label(result_frame, text=f"  Client ID: {client_id}").pack(anchor=tk.W, padx=10, pady=1)
-                        ttk.Label(result_frame, text=f"  测试状态: 成功").pack(anchor=tk.W, padx=10, pady=1)
-                        ttk.Label(result_frame, text=f"  响应状态码: {response.status_code}").pack(anchor=tk.W, padx=10, pady=1)
-                    else:
-                        ttk.Label(self.conn_test_results_frame, text=f"123云盘: 连通性测试失败 - {response.status_code}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
-                except Exception as e:
-                    ttk.Label(self.conn_test_results_frame, text=f"123云盘: 连通性测试错误 - {str(e)}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
-        
-        # 测试 OpenList (版本 6.0)
-        elif version == "6.0":
-            openlist_url = config.get("openlist_url")
-            openlist_username = config.get("openlist_username")
-            openlist_password = config.get("openlist_password")
-            
-            if not openlist_url or not openlist_username or not openlist_password:
-                ttk.Label(self.conn_test_results_frame, text="OpenList参数不完整", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
-            else:
-                # 测试 OpenList 连通性
-                try:
-                    from alist import AList, AListUser
-                    import asyncio
-                    
-                    # 为当前线程创建事件循环
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    
+            # 测试 123 云盘 (版本 5.0)
+            if version == "5.0":
+                client_id = config.get("client_id")
+                client_secret = config.get("client_secret")
+                access_token = config.get("access_token")
+                
+                if not client_id or not client_secret or not access_token:
+                    def show_incomplete_params():
+                        for widget in self.conn_test_results_frame.winfo_children():
+                            widget.destroy()
+                        ttk.Label(self.conn_test_results_frame, text="123云盘参数不完整", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+                        elapsed_time = time.time() - start_time
+                        ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
+                    self.root.after(0, show_incomplete_params)
+                else:
+                    # 测试 123 云盘连通性
                     try:
-                        # 测试 OpenList 连通性（同步操作）
-                        user = AListUser(openlist_username, openlist_password)
-                        client = AList(openlist_url)
+                        import requests
+                        url = "https://open.123pan.com/api/v1/file/list"
+                        headers = {"Authorization": f"Bearer {access_token}"}
+                        response = requests.get(url, headers=headers, timeout=10)
                         
-                        # 尝试登录
-                        client.login(user)
+                        def show_success():
+                            for widget in self.conn_test_results_frame.winfo_children():
+                                widget.destroy()
+                            result_frame = ttk.LabelFrame(self.conn_test_results_frame, text="123云盘: 连通性测试成功")
+                            result_frame.pack(fill=tk.X, padx=5, pady=2)
+                            ttk.Label(result_frame, text=f"  Client ID: {client_id}").pack(anchor=tk.W, padx=10, pady=1)
+                            ttk.Label(result_frame, text=f"  测试状态: 成功").pack(anchor=tk.W, padx=10, pady=1)
+                            ttk.Label(result_frame, text=f"  响应状态码: {response.status_code}").pack(anchor=tk.W, padx=10, pady=1)
+                            elapsed_time = time.time() - start_time
+                            ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
                         
-                        # 无论 login_result 返回什么，只要不抛异常就认为成功
-                        # 登录测试成功，打印详细信息
-                        result_frame = ttk.LabelFrame(self.conn_test_results_frame, text="OpenList: 连通性测试成功")
-                        result_frame.pack(fill=tk.X, padx=5, pady=2)
-                        ttk.Label(result_frame, text=f"  服务器 URL: {openlist_url}").pack(anchor=tk.W, padx=10, pady=1)
-                        ttk.Label(result_frame, text=f"  用户名: {openlist_username}").pack(anchor=tk.W, padx=10, pady=1)
-                    finally:
-                        # 清理事件循环，确保所有任务都已完成
-                        try:
-                            # 取消所有未完成的任务
-                            pending = asyncio.all_tasks(loop)
-                            for task in pending:
-                                task.cancel()
-                            # 等待所有任务完成
-                            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-                        except Exception:
-                            pass
-                        finally:
-                            # 关闭事件循环
-                            loop.close()
-                except Exception as e:
-                    # 打印异常信息
-                    import traceback
-                    traceback.print_exc()
-                    ttk.Label(self.conn_test_results_frame, text=f"OpenList: 连通性测试错误 - {str(e)}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+                        def show_failure():
+                            for widget in self.conn_test_results_frame.winfo_children():
+                                widget.destroy()
+                            ttk.Label(self.conn_test_results_frame, text=f"123云盘: 连通性测试失败 - {response.status_code}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+                            elapsed_time = time.time() - start_time
+                            ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
+                        
+                        self.root.after(0, show_success if response.status_code == 200 else show_failure)
+                    except Exception as e:
+                        def show_error():
+                            for widget in self.conn_test_results_frame.winfo_children():
+                                widget.destroy()
+                            ttk.Label(self.conn_test_results_frame, text=f"123云盘: 连通性测试错误 - {str(e)}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+                            elapsed_time = time.time() - start_time
+                            ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
+                        self.root.after(0, show_error)
+            
+            # 测试 OpenList (版本 6.0)
+            elif version == "6.0":
+                openlist_url = config.get("openlist_url")
+                openlist_username = config.get("openlist_username")
+                openlist_password = config.get("openlist_password")
+                openlist_target_folder = config.get("openlist_target_folder", "/")
+                
+                if not openlist_url or not openlist_username:
+                    def show_incomplete_params():
+                        for widget in self.conn_test_results_frame.winfo_children():
+                            widget.destroy()
+                        ttk.Label(self.conn_test_results_frame, text="OpenList参数不完整", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+                        elapsed_time = time.time() - start_time
+                        ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
+                    self.root.after(0, show_incomplete_params)
+                else:
+                    # 测试 OpenList 连通性
+                    try:
+                        from alist import AListAsync, AListUser
+                        import asyncio
+                        import tempfile
+                        import os as os_module
+                        
+                        # 先显示登录成功信息
+                        result_frame = None
+                        def show_login_success():
+                            nonlocal result_frame
+                            for widget in self.conn_test_results_frame.winfo_children():
+                                widget.destroy()
+                            result_frame = ttk.LabelFrame(self.conn_test_results_frame, text="OpenList: 登录测试成功")
+                            result_frame.pack(fill=tk.X, padx=5, pady=2)
+                            ttk.Label(result_frame, text=f"  服务器 URL: {openlist_url}").pack(anchor=tk.W, padx=10, pady=1)
+                            ttk.Label(result_frame, text=f"  用户名: {openlist_username}").pack(anchor=tk.W, padx=10, pady=1)
+                            ttk.Label(result_frame, text=f"  上传测试进行中...", foreground="blue").pack(anchor=tk.W, padx=10, pady=1)
+                        
+                        # 更新上传测试结果
+                        def update_upload_result(result_data):
+                            nonlocal result_frame
+                            if not result_frame:
+                                return
+                            
+                            # 移除之前的"上传测试进行中..."标签
+                            for widget in result_frame.winfo_children():
+                                if widget.cget("text") == "  上传测试进行中...":
+                                    widget.destroy()
+                                    break
+                            
+                            # 添加新的上传测试结果
+                            if result_data['upload_success']:
+                                if result_data['delete_success']:
+                                    ttk.Label(result_frame, text=f"  上传/删除测试: 成功", foreground="green").pack(anchor=tk.W, padx=10, pady=1)
+                                else:
+                                    ttk.Label(result_frame, text=f"  上传测试: 成功 (删除失败: {result_data['delete_error']})", foreground="orange").pack(anchor=tk.W, padx=10, pady=1)
+                            else:
+                                if result_data['upload_error']:
+                                    ttk.Label(result_frame, text=f"  上传测试: 错误 - {result_data['upload_error']}", foreground="red").pack(anchor=tk.W, padx=10, pady=1)
+                                else:
+                                    ttk.Label(result_frame, text=f"  上传测试: 失败", foreground="red").pack(anchor=tk.W, padx=10, pady=1)
+                            
+                            # 添加测试用时
+                            elapsed_time = time.time() - start_time
+                            ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
+                        
+                        # 异步测试函数
+                        async def test_upload_and_delete(client):
+                            result_data = {
+                                'openlist_url': openlist_url,
+                                'username': openlist_username,
+                                'upload_success': False,
+                                'delete_success': False,
+                                'upload_error': None,
+                                'delete_error': None
+                            }
+                            
+                            # 创建测试文件
+                            test_file_name = ".obu_connectivity_test.tmp"
+                            test_file_path = os_module.path.join(tempfile.gettempdir(), test_file_name)
+                            with open(test_file_path, 'w') as f:
+                                f.write("Office Backup Utility Connectivity Test File\n")
+                                f.write(f"Test Time: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                            
+                            target_file_path = openlist_target_folder.rstrip('/') + '/' + test_file_name if openlist_target_folder != "/" else '/' + test_file_name
+                            
+                            try:
+                                result_data['upload_success'] = await client.upload(target_file_path, test_file_path)
+                                if result_data['upload_success']:
+                                    try:
+                                        await client.remove(target_file_path)
+                                        result_data['delete_success'] = True
+                                    except Exception as delete_error:
+                                        result_data['delete_error'] = str(delete_error)
+                            except Exception as upload_error:
+                                result_data['upload_error'] = str(upload_error)
+                            
+                            # 删除本地临时文件
+                            try:
+                                os_module.remove(test_file_path)
+                            except Exception:
+                                pass
+                            
+                            return result_data
+                        
+                        # 运行异步测试并更新结果
+                        def run_async_test():
+                            # 先登录
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                            try:
+                                user = AListUser(openlist_username, openlist_password)
+                                client = AListAsync(openlist_url)
+                                login_result = loop.run_until_complete(client.login(user))
+                                
+                                # 显示登录成功信息
+                                self.root.after(0, show_login_success)
+                                
+                                # 运行上传测试
+                                result_data = loop.run_until_complete(test_upload_and_delete(client))
+                                self.root.after(0, lambda: update_upload_result(result_data))
+                            finally:
+                                loop.close()
+                        
+                        threading.Thread(target=run_async_test, daemon=True).start()
+                        
+                    except Exception as e:
+                        def show_openlist_error():
+                            import traceback
+                            traceback.print_exc()
+                            for widget in self.conn_test_results_frame.winfo_children():
+                                widget.destroy()
+                            ttk.Label(self.conn_test_results_frame, text=f"OpenList: 连通性测试错误 - {str(e)}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+                            elapsed_time = time.time() - start_time
+                            ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
+                        self.root.after(0, show_openlist_error)
         
-        # 计算测试用时
-        end_time = time.time()
-        elapsed_time = end_time - start_time
-        # 显示测试用时
-        ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
+        # 启动后台线程
+        thread = threading.Thread(target=run_test_in_thread, daemon=True)
+        thread.start()
     
     def on_version_change(self):
         new_version = self.version_var.get()

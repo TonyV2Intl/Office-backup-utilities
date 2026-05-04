@@ -132,14 +132,24 @@ def timeout(seconds, config_key=None):
                             pass
                     # 启动新实例
                     try:
-                        # 构建完整的命令
-                        script_path = os.path.abspath(__file__)
-                        command = [sys.executable, script_path]
-                        # 直接启动，不打印日志
-                        subprocess.Popen(command)
+                        # 获取当前运行的可执行文件路径
+                        # sys.argv[0] 在打包为exe后指向实际的exe文件
+                        current_exe = sys.argv[0]
+                        if not os.path.isabs(current_exe):
+                            current_exe = os.path.abspath(current_exe)
+                        
+                        # 启动新实例
+                        subprocess.Popen([current_exe])
                         time.sleep(1)  # 给新进程启动时间
-                    except:
-                        pass
+                    except Exception as e:
+                        # 如果sys.argv[0]失败，尝试其他方法
+                        try:
+                            # 尝试使用__file__（适用于未打包的情况）
+                            script_path = os.path.abspath(__file__)
+                            subprocess.Popen([sys.executable, script_path])
+                            time.sleep(1)
+                        except:
+                            pass
                     # 强制退出
                     os._exit(1)
             
