@@ -224,3 +224,5 @@ The source code is open under the MIT license and is fully annotated. Study, com
 7. 全功能主程序（6.0版本）可通过修改`hide_tray_icon`配置项来决定是否显示托盘图标
 
 8. 优化导入语句顺序，将原先分散在文件各处的导入语句统一移到文件开头
+
+9. 全部使用Github Actions的Windows环境来进行Nuitka的.exe编译，使用MSVC14.0编译器以兼容Windows7
