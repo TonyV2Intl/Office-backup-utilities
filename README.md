@@ -5,54 +5,71 @@
   
 源代码以MIT协议公开，全部有注释，欢迎研究、交流与改进  
 The source code is open under the MIT license and is fully annotated. Study, communications and modifications are welcome.  
-  
-**稳定版本：6.0（推荐，最新，功能全面）或4.2（经过长期测试，运行稳定，依赖项少）**  
+
 > [!IMPORTANT]
 > WPS的备份功能**理论上只支持WPS专业版，个人版不可用（除非劫持了Powerpoint的COM接口）**，且**只能备份PPT，不能备份Word**，WPS2019教育考试专用版经实测可用，可至<https://hellowindows.cn>中的Office/WPS分区下载，来自此网站的WPS2019教育考试专用版123云盘链接：<https://www.123pan.com/s/ZrzA-2UZgh>
+
+## 版本选择
+
+**稳定版本：6.0（推荐，最新，功能全面）或4.2（经过长期使用，运行稳定，依赖项少）  
+6.0Core版本在仅保留6.0版本基本的本地备份功能与新特性的同时最小化了依赖项，可按需取用**  
+
+|版本|本地备份|托盘图标|对接Openlist|对接123云盘|配置文件编辑器|
+|--|--|--|--|--|--|
+|**6.0**|✅（单个程序）|✅|✅|✅（可通过Openlist挂载）|✅|
+|**6.0Core**|✅（单个程序）|❌|❌|❌|✅|
+|5.0|✅（单个程序）|✅|❌|✅（直接通过Python对接）|✅|
+|4.2|✅（三个独立程序）|❌|❌|❌|❌|
 
 ## 使用方法
 
 ### 6.0版本-直接运行（二进制文件）
 
-1.下载Release中的Officebackup6.0.exe（支持Windows7及以上系统）  
-2.下载ConfigEditor.exe，放置在主程序的同级目录下，按需修改配置项，方法[见下](#配置文件编辑器config-editor)
-3.（可选）把程序放在某个隐蔽的角落，右键创建一个快捷方式，按win+r打开运行框，输入shell:startup，这个文件夹是Windows启动项的文件夹，把快捷方式丢进去就可以实现开机自动以最小化窗口运行（不能直接将程序放在此文件夹中，无法生效）
+1. 下载Release中的Officebackup6.0.exe（支持Windows7及以上系统）；如果要使用Openlist上传功能，请参照[官方文档](https://doc.oplist.org)**自行部署Openlist服务并挂载存储**，确保服务能在运行程序的环境下访问（除非是局域网访问（应该不可能），否则需要拥有公网可访问的域名/IP，或做好内网穿透）  
+2. 下载ConfigEditor.exe，放置在主程序的同级目录下，按需修改配置项，方法[见下](#配置文件编辑器config-editor)
+3. （可选）把程序放在某个隐蔽的角落，右键创建一个快捷方式，按win+r打开运行框，输入shell:startup，这个文件夹是Windows启动项的文件夹，把快捷方式丢进去就可以实现开机自动以最小化窗口运行（不能直接将程序放在此文件夹中，无法生效）
 
 ### 6.0版本-从源码运行
 
-1.安装Python 3.8及以上版本  
-2.在命令行中执行以下命令安装依赖：  
+1. 安装Python 3.8及以上版本  
+2. 在命令行中执行以下命令安装依赖：  
 
-```shell
-pip install -U pywin32 Pillow pystray alist3==1.3.1
-```
+    ```shell
+    pip install -U pywin32 Pillow pystray alist3==1.3.1
+    ```
 
-3.下载Officebackup6.0.py和ConfigEditor.py，放置在同级目录下，使用方法[同上](#60版本-直接运行二进制文件)
+    如果是6.0Core版本，只需要安装pywin32库：  
+
+    ```shell
+    pip install pywin32
+    ```
+
+3. 下载Officebackup6.0.py和ConfigEditor.py，放置在同级目录下，使用方法[同上](#60版本-直接运行二进制文件)  
 
 ### 4.2版本-直接运行（二进制文件）
 
-按需下载Release中的pptbackup.4.2.exe、wordbackup.4.2.exe、pptbackup.4.2-WPS.exe，只能使用默认的备份路径（"C:\pptbackup"或"C:\wordbackup"）和轮询周期（180秒），无法修改，如果需要修改备份路径或轮询周期，请使用下面的方法[从源码运行](#42版本-从源码运行)
+按需下载Release中的pptbackup.4.2.exe、wordbackup.4.2.exe、pptbackup.4.2-WPS.exe，只能使用默认的备份路径（"C:\pptbackup"或"C:\wordbackup"）和轮询周期（180秒），无法修改，如果需要修改备份路径或轮询周期，请使用下面的方法[从源码运行](#42版本-从源码运行)  
 
 ### 4.2版本-从源码运行
 
-1.安装Python 3.8及以上版本  
-2.在命令行中执行以下命令安装pywin32库：
+1. 安装Python 3.8及以上版本  
+2. 在命令行中执行以下命令安装pywin32库：
 
-```shell
-pip install pywin32
-```
+    ```shell
+    pip install pywin32
+    ```
 
-2.自行修改倒数第7行save_folder变量指定的保存路径（前面的r表示绝对路径），默认在C盘根目录下创建pptbackup文件夹；倒数第9行的time.sleep()里可以自行调节轮询的时间周期，单位是秒，默认为3分钟一次（180秒）  
-3.（可选）把源码放在某个隐蔽的角落，右键创建一个快捷方式（可以右键打开属性，设置为打开时最小化窗口），按win+r打开运行框，输入shell:startup，这个文件夹是Windows启动项的文件夹，把快捷方式丢进去就可以实现开机自动以最小化窗口运行（不能直接将程序放在此文件夹中，无法生效）  
-4.（可选，不建议）如果想要完全静默运行，不弹出运行框，先将Python文件名中的空格删除（例如将pptbackup 4.0.py改为pptbackup4.0.py，否则无法索引到），新建一个文本文档，输入以下代码，其中引号部分要换成Python文件的路径（Windows10/11可以直接右键，点复制文件路径）：  
+3. 自行修改倒数第7行save_folder变量指定的保存路径（前面的r表示绝对路径），默认在C盘根目录下创建pptbackup文件夹；倒数第9行的time.sleep()里可以自行调节轮询的时间周期，单位是秒，默认为3分钟一次（180秒）  
+4. （可选）把源码放在某个隐蔽的角落，右键创建一个快捷方式（可以右键打开属性，设置为打开时最小化窗口），按win+r打开运行框，输入shell:startup，这个文件夹是Windows启动项的文件夹，把快捷方式丢进去就可以实现开机自动以最小化窗口运行（不能直接将程序放在此文件夹中，无法生效）  
+5. （可选，不建议）如果想要完全静默运行，不弹出运行框，先将Python文件名中的空格删除（例如将pptbackup 4.0.py改为pptbackup4.0.py，否则无法索引到），新建一个文本文档，输入以下代码，其中引号部分要换成Python文件的路径（Windows10/11可以直接右键，点复制文件路径）：  
 
-```vb
-Set ws = CreateObject("Wscript.Shell")
-ws.run "C:\pptbackup4.0.py",vbhide
-```
+    ```vb
+    Set ws = CreateObject("Wscript.Shell")
+    ws.run "C:\pptbackup4.0.py",vbhide
+    ```
 
-保存退出，将文件后缀名由.txt改为.vbs，弹出提示框确认更改；最后与第3步一样，为VBS文件创建快捷方式，放到shell:startup文件夹内（不能直接将VBS脚本放在此文件夹中，无法生效；放入VBS脚本后，Python文件的快捷方式就不用放置了，否则将启动两个程序）  
-此种方式若需要停止程序运行，只能到任务管理器中结束所有Python相关进程，不方便监控程序运行情况，请酌情使用  
+    保存退出，将文件后缀名由.txt改为.vbs，弹出提示框确认更改；最后与第3步一样，为VBS文件创建快捷方式，放到shell:startup文件夹内（不能直接将VBS脚本放在此文件夹中，无法生效；放入VBS脚本后，Python文件的快捷方式就不用放置了，否则将启动两个程序）  
+    此种方式若需要停止程序运行，只能到任务管理器中结束所有Python相关进程，不方便监控程序运行情况，请酌情使用  
 
 ### 配置文件编辑器（Config Editor）
 
@@ -63,15 +80,18 @@ ws.run "C:\pptbackup4.0.py",vbhide
 在左上角选择程序对应的版本（6.0、6.0Core或5.0），在下方按需修改配置项，所有修改将实时保存到配置文件  
 
 在右上角可以进行这些操作：  
-`恢复默认配置`：恢复当前版本的默认配置  
-`撤销（上一步）`、`重做（下一步）`：撤销或重做修改  
-`（切换到原始/简明键名）`：在 显示Json文件的原始键名 和 显示其对应的中文含义 之间切换
-`一键启动`：启动当前版本的程序（需要同级目录下有对应版本程序的.py或.exe文件）  
+
+* `恢复默认配置`：恢复当前版本的默认配置  
+* `撤销（上一步）`、`重做（下一步）`：撤销或重做修改  
+* `（切换到原始/简明键名）`：在 显示Json文件的原始键名 和 显示其对应的中文含义 之间切换
+* `一键启动`：启动当前版本的程序（需要同级目录下有对应版本程序的.py或.exe文件）  
 
 > [!NOTE]
-> 6.0版本中，若要启用Openlist上传功能，必须填入Openlist的服务器URL、用户名和目标文件夹路径（即`openlist_url`、`openlist_username`和`openlist_target_folder`三个配置项），程序启动时将校验参数完整性，若不完整将强制禁用Openlist上传功能
+> 6.0版本中，若要启用Openlist上传功能，必须填入Openlist的服务器URL、用户名和目标文件夹路径（即`openlist_url`、`openlist_username`和`openlist_target_folder`三个配置项），程序启动时将校验参数完整性，若不完整将强制禁用Openlist上传功能  
+> 填入的Openlist用户必须至少拥有`写入内容（创建/上传/修改）`和`删除`权限  
+> ![Openlist用户配置](./ReadmeIMG/OpenlistUser.png "Openlist用户配置")  
 
-6.0版默认配置文件及其含义：  
+6.0版默认配置文件以及各配置项含义解释：  
 
 ```json
 {
@@ -95,6 +115,7 @@ ws.run "C:\pptbackup4.0.py",vbhide
     "accurate_backup_source_path": "",
     "accurate_backup_target_path": "",
     //托盘图标、控制台行为与日志保存设置
+    "hide_tray_icon": false,   //是否隐藏托盘图标，True为隐藏，False为显示（默认）
     "show_console_window_at_startup": false,   //程序启动时显示控制台窗口，True为显示，False为隐藏（默认）
     "save_log": true,   //是否保存日志到OBUlatest.log文件，True为保存（默认），False为不保存
     "archive_previous_log": true,   //是否在程序启动时归档之前的日志（重命名为OBUprevious.log），True为归档（默认），False为直接覆盖
@@ -109,8 +130,10 @@ ws.run "C:\pptbackup4.0.py",vbhide
 
 ![ConfigEditor连通性测试页面](./ReadmeIMG/ConfigEditor2.png "ConfigEditor连通性测试页面")  
 
-在此页面中，可以测试COM接口能否正常捕获Powerpoint、Word和WPS实例，也可以进行网络存储的连通性测试
-网络存储lianton先选择对应版本
+在此页面中，可以测试COM接口和网络存储的连通性：  
+
+* COM接口测试：检查能否正常捕获Powerpoint、Word和WPS实例，若捕获到则会列出打开的文件名称  
+* 网络存储连通性测试：需要先在左侧选择对应版本（6.0对应Openlist，5.0对应123云盘API），并确保配置文件内的相关参数完整，然后运行测试：6.0版本会尝试登录Openlist账号，并创建一个临时文件，运行上传和删除测试；5.0版本会发送HTTP GET请求到<https://open.123pan.com/api/v1/file/list>，检查返回状态码是否为200
 
 ## 程序由来
 
@@ -183,3 +206,21 @@ ws.run "C:\pptbackup4.0.py",vbhide
 ### 2025-11-01凌晨（5.0发布）
 
 ·修复了开机自启后程序无法第一时间联网获取云盘token、标记token_aquired=False时出现的逻辑问题，**确保在任何情况下token_aquired和acccess_token变量都有定义**，避免在上传函数内第二次获取token时出现变量未定义错误导致程序直接终止
+
+### 2026-05-05凌晨（6.0发布）
+
+1. **Openlist支持**：由于123云盘API不再对非会员用户开放，于是移除了对123云盘API的支持，**转而改用`alist3`库对接[Openlist](https://doc.oplist.org)**（一个著名的文件列表程序，支持50+种存储的挂载）；同时**将上传操作改为异步操作，在独立线程中运行**，避免阻塞主线程，支持配置最大重试次数和重试等待时间
+
+2. **超时检测机制**：实际测试中发现，在Windows7上以开机自启方式运行新版程序（6.0测试版）时，出现了运行一段时间后主线程死锁的问题，且每次开机都能稳定复现，如果不是在开机自启时运行的会话则不会出现死锁，且5.0版程序未发生过此类问题；针对该问题，**使用 `@timeout` 装饰器实现了超时检测功能**，在独立线程中针对四个备份操作函数（PPT、Word、WPS、文件夹精确备份）的执行时间计时，**如果超过阈值将强制结束当前程序并重启**，支持通过配置文件自定义超时时间
+
+3. **MD5校验机制**：原先通过指定`max_skipping_time`配置项来判断重复出现的文件是否需要备份，不够智能；现在会**自动计算同名文件的MD5值并进行比较**，判断文件是否变化，只有文件变化才会备份，否则直接跳过
+
+4. **图标处理**：使用**Base64编码直接将图标数据嵌入到代码中**，摆脱对外部图标文件的依赖，避免打包为.exe时出现的即使指明包含图标文件却仍然需要手动将图标放在程序同级目录下的问题
+
+5. **日志系统改进**：日志文件重命名为`OBUlatest.log`和`OBUprevious.log`，增加了默认开启的日志归档选项，保留前一次会话的日志便于Debug，而不是像5.0版本一样直接覆盖；增加了`source`参数来区分日志来源（是来自主程序还是Openlist的备份操作）；新增`global_exception_handler()`函数，捕获程序中所有未自动处理的异常，并写入日志文件
+
+6. 只读文件处理：新增`remove_readonly()`函数，备份前移除目标文件的只读属性
+
+7. 全功能主程序（6.0版本）可通过修改`hide_tray_icon`配置项来决定是否显示托盘图标
+
+8. 优化导入语句顺序，将原先分散在文件各处的导入语句统一移到文件开头

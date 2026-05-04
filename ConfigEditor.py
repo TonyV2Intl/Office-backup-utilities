@@ -406,7 +406,6 @@ class ConfigEditor:
         
         # 在后台线程中执行测试
         def run_test_in_thread():
-            results = []
             
             # 测试 123 云盘 (版本 5.0)
             if version == "5.0":
@@ -712,6 +711,7 @@ class ConfigEditor:
                 "accurate_backup_enable": False,
                 "accurate_backup_source_path": "",
                 "accurate_backup_target_path": "",
+                "hide_tray_icon": False,
                 "show_console_window_at_startup": False,
                 "save_log": True,
                 "archive_previous_log": True,
@@ -773,7 +773,10 @@ class ConfigEditor:
         sections["精确备份"] = ["accurate_backup_enable", "accurate_backup_source_path", "accurate_backup_target_path"]
         
         # 添加控制台和日志设置
-        sections["控制台与日志"] = ["show_console_window_at_startup", "save_log", "archive_previous_log"]
+        if self.current_version == "6.0":
+            sections["界面与日志"] = ["hide_tray_icon", "show_console_window_at_startup", "save_log", "archive_previous_log"]
+        else:
+            sections["控制台与日志"] = ["show_console_window_at_startup", "save_log", "archive_previous_log"]
         
         # 添加超时和重试设置
         if self.current_version == "6.0":
@@ -961,6 +964,7 @@ class ConfigEditor:
             "accurate_backup_enable": "启用精确备份",
             "accurate_backup_source_path": "精确备份源路径",
             "accurate_backup_target_path": "精确备份目标路径",
+            "hide_tray_icon": "隐藏托盘图标",
             "show_console_window_at_startup": "启动时显示控制台",
             "save_log": "保存日志",
             "archive_previous_log": "归档之前的日志",

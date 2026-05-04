@@ -13,6 +13,7 @@
     "accurate_backup_enable": false,
     "accurate_backup_source_path": "",
     "accurate_backup_target_path": "",
+    "hide_tray_icon": false,
     "show_console_window_at_startup": false,
     "save_log": true,
     "archive_previous_log": true,
