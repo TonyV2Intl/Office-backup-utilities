@@ -44,6 +44,7 @@ default_config = {
     "accurate_backup_target_path": "",
     #托盘图标、控制台行为与日志保存设置
     #"tray_left_click_behavior": "open_console",   #托盘图标左键点击行为，选项有"open_console"（打开控制台）和"exit_program"（退出程序）（无法生效）
+    "hide_tray_icon": False,   #是否隐藏托盘图标，True为隐藏，False为显示（默认）
     "show_console_window_at_startup": False,   #程序启动时显示控制台窗口，True为显示，False为隐藏（默认）
     "save_log": True,   #是否保存日志到OBUlatest.log文件，True为保存（默认），False为不保存
     "archive_previous_log": True,   #是否在程序启动时归档之前的日志（重命名为OBUprevious.log），True为归档（默认），False为直接覆盖
@@ -744,13 +745,11 @@ menu = (item('Show/Hide console window', toggle_console), item('Exit program', e
 icon = pystray.Icon("office_backup_utilities", image, "Office Backup Utilities", menu)   #创建托盘图标对象
 '''icon.on_left_click = on_clicked   #绑定左键单击事件处理函数（无法生效）'''
 
-
-
-
-
-icon_task = threading.Thread(target=icon.run)   #创建托盘图标线程
-icon_task.daemon = True   #设置为守护线程（随主程序终止而自动结束）
-icon_task.start()   #启动托盘图标线程
+# 根据配置决定是否启动托盘图标
+if not config.get('hide_tray_icon'):
+    icon_task = threading.Thread(target=icon.run)   #创建托盘图标线程
+    icon_task.daemon = True   #设置为守护线程（随主程序终止而自动结束）
+    icon_task.start()   #启动托盘图标线程
 
 # 全局异常处理函数
 def global_exception_handler(exctype, value, tb):   #处理全局未捕获异常
