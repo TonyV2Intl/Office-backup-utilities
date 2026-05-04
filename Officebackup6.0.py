@@ -204,11 +204,15 @@ def upload_to_openlist_thread():   #在单独线程中执行上传操作
                         else:
                             log_print('Upload to OpenList failed', source='openlist')
                     except Exception as e:
-                        log_print('Upload failed with error: ' + str(e), source='openlist')
+                        error_str = str(e)
+                        # 单独处理522错误（Cloudflare origin error），不输出详细信息
+                        if '522' in error_str:
+                            log_print('Upload failed: Server connection error (522), will retry in next upload', source='openlist')
                         # 检查是否是 504 超时错误
-                        if '504' in str(e) or 'timeout' in str(e).lower():
+                        elif '504' in error_str or 'timeout' in error_str.lower():
                             log_print('Server timeout error, will retry in next upload', source='openlist')
                         else:
+                            log_print('Upload failed: ' + error_str, source='openlist')
                             log_print('Upload failed, will retry in next upload', source='openlist')
                     
                     return upload_result
@@ -232,8 +236,13 @@ def upload_to_openlist_thread():   #在单独线程中执行上传操作
                     failed_in_this_round = True
                 
             except Exception as e:
-                log_print('Upload to OpenList failed: ' + str(e), source='openlist')
-                log_print('Traceback: ' + traceback.format_exc(), source='openlist')
+                error_str = str(e)
+                # 单独处理522错误（Cloudflare origin error），不输出完整traceback
+                if '522' in error_str:
+                    log_print('Upload to OpenList failed: Server connection error (522), will retry in next upload', source='openlist')
+                else:
+                    log_print('Upload to OpenList failed: ' + error_str, source='openlist')
+                    log_print('Traceback: ' + traceback.format_exc(), source='openlist')
                 # 发生错误时，保留文件在队列中，等待下次上传
                 upload_end_time=datetime.datetime.now()   #记录上传操作结束时间
                 upload_used_time=upload_end_time-upload_start_time   #计算上传所用时间
@@ -377,6 +386,19 @@ def calculate_md5(file_path):  # 计算文件的MD5值
         log_print('Error calculating MD5 for ' + file_path + ': ' + str(e))
         return None
 
+# 辅助函数：检查并移除文件只读属性
+def remove_readonly(file_path):
+    try:
+        if os.path.exists(file_path):
+            # 检查文件是否只读
+            attrs = os.stat(file_path).st_mode
+            # 移除只读属性
+            if not (attrs & 0o200):  # 如果是只读的
+                os.chmod(file_path, attrs | 0o200)  # 添加写入权限
+                log_print(f"Removed readonly attribute from {file_path}")
+    except Exception as e:
+        log_print(f"Error removing readonly from {file_path}: {e}")
+
 
 
 
@@ -408,16 +430,23 @@ def save_open_ppt_files(ppt_save_folder):   #定义ppt保存函数，参数ppt_s
                 original_md5 = calculate_md5(ppt_path)
                 backup_md5 = calculate_md5(new_ppt_path)
                 
+                # 只有当两个MD5都成功计算且相同时才跳过
                 if original_md5 and backup_md5 and original_md5 == backup_md5:
                     # MD5值相同，跳过备份
                     log_print(ppt_name + ' has already existed in ' + ppt_save_folder + ', skipped backup (MD5 match)')   #打印跳过信息
                     continue   #跳过此次备份
+                elif original_md5 is None:
+                    # 源文件找不到，跳过这次备份
+                    log_print(ppt_name + ' source file not found, skipping this backup')
+                    continue
                 else:
                     # MD5值不同，需要备份
                     log_print(ppt_name + ' has changed, backup will begin soon (MD5 mismatch)')
             
             Existed_in_this_session[ppt_name] = True   #标记该文件在本次会话中出现过
             log_print('Start to backup ' + ppt_name + ' to ' + ppt_save_folder)   #打印备份开始信息
+            # 如果目标文件存在，先移除只读属性
+            remove_readonly(new_ppt_path)
             copy_start_time=datetime.datetime.now()   #记录复制操作开始时间
             shutil.copy2(ppt_path, new_ppt_path)   #复制PPT到备份文件夹，并尝试保留元数据（如修改时间等）
             copy_end_time=datetime.datetime.now()   #记录复制操作结束时间
@@ -444,7 +473,12 @@ def save_open_ppt_files(ppt_save_folder):   #定义ppt保存函数，参数ppt_s
 
         for idx in range(1, presentations.Count + 1):   #遍历PPT实例集合
             ppt = presentations.Item(idx)   #获取当前PPT实例
-            log_print('Start to backup ' + ppt_name + ' to ' + ppt_save_folder)   #打印备份开始信息
+            ppt_path = ppt.FullName   #获取PPT文件的完整路径
+            ppt_name = os.path.basename(ppt_path)   #提取文件名
+            new_ppt_path = os.path.join(ppt_save_folder, ppt_name)   #生成备份路径
+            log_print('Start to backup ' + ppt_name + ' to ' + ppt_save_folder + ' using SaveAs method')   #打印备份开始信息
+            # 如果目标文件存在，先移除只读属性
+            remove_readonly(new_ppt_path)
             savestarttime=datetime.datetime.now()   #记录保存操作开始时间
             ppt.SaveAs(new_ppt_path)   #使用SaveAs方法保存当前PPT实例到指定路径
             saveendtime=datetime.datetime.now()   #记录保存操作结束时间
@@ -489,16 +523,23 @@ def save_open_word_files(word_save_folder):   #定义word保存函数，参数wo
                 original_md5 = calculate_md5(doc_path)
                 backup_md5 = calculate_md5(new_doc_path)
                 
+                # 只有当两个MD5都成功计算且相同时才跳过
                 if original_md5 and backup_md5 and original_md5 == backup_md5:
                     # MD5值相同，跳过备份
                     log_print(doc_name + ' has already existed in ' + word_save_folder + ', skipped backup (MD5 match)')   #打印跳过信息
                     continue   #跳过此次备份
+                elif original_md5 is None:
+                    # 源文件找不到，跳过这次备份
+                    log_print(doc_name + ' source file not found, skipping this backup')
+                    continue
                 else:
                     # MD5值不同，需要备份
                     log_print(doc_name + ' has changed, backup will begin soon (MD5 mismatch)')
-
+            
             Existed_in_this_session[doc_name] = True   #标记该文件在本次会话中出现过
             log_print('Start to backup ' + doc_name + ' to ' + word_save_folder)   #打印备份开始信息
+            # 如果目标文件存在，先移除只读属性
+            remove_readonly(new_doc_path)
             copy_start_time=datetime.datetime.now()   #记录复制操作开始时间
             shutil.copy2(doc_path, new_doc_path)   #复制文档到备份文件夹，并尝试保留元数据（如修改时间等）
             copy_end_time=datetime.datetime.now()   #记录复制操作结束时间
@@ -525,7 +566,12 @@ def save_open_word_files(word_save_folder):   #定义word保存函数，参数wo
     
         for idx in range(1, documents.Count + 1):   #遍历文档实例集合
             doc = documents.Item(idx)   #获取当前文档实例
-            log_print('Start to backup ' + doc_name + ' to ' + word_save_folder)   #打印备份开始信息
+            doc_path = doc.FullName   #获取Word文件的完整路径
+            doc_name = os.path.basename(doc_path)   #提取文件名
+            new_doc_path = os.path.join(word_save_folder, doc_name)   #生成备份路径
+            log_print('Start to backup ' + doc_name + ' to ' + word_save_folder + ' using SaveAs method')   #打印备份开始信息
+            # 如果目标文件存在，先移除只读属性
+            remove_readonly(new_doc_path)
             save_start_time=datetime.datetime.now()   #记录保存操作开始时间
             doc.SaveAs(new_doc_path)   #使用SaveAs方法保存当前文档实例到指定路径
             save_end_time=datetime.datetime.now()   #记录保存操作结束时间
@@ -570,16 +616,23 @@ def save_open_WPS_files(ppt_save_folder):   #定义WPS保存函数，参数ppt_s
                 original_md5 = calculate_md5(WPS_ppt_path)
                 backup_md5 = calculate_md5(WPS_new_ppt_path)
                 
+                # 只有当两个MD5都成功计算且相同时才跳过
                 if original_md5 and backup_md5 and original_md5 == backup_md5:
                     # MD5值相同，跳过备份
                     log_print(WPS_ppt_name + ' has already existed in ' + ppt_save_folder + ', skipped backup (MD5 match)')   #打印带时间戳和运行次数的跳过信息
                     continue   #跳过此次备份
+                elif original_md5 is None:
+                    # 源文件找不到，跳过这次备份
+                    log_print(WPS_ppt_name + ' source file not found, skipping this backup')
+                    continue
                 else:
                     # MD5值不同，需要备份
                     log_print(WPS_ppt_name + ' has changed, backup will begin soon (MD5 mismatch)')
-
+            
             Existed_in_this_session[WPS_ppt_name] = True   #标记该文件在本次会话中出现过
             log_print('Start to backup ' + WPS_ppt_name + ' to ' + ppt_save_folder)   #打印备份开始信息
+            # 如果目标文件存在，先移除只读属性
+            remove_readonly(WPS_new_ppt_path)
             copystarttime=datetime.datetime.now()   #记录复制操作开始时间
             shutil.copy2(WPS_ppt_path, WPS_new_ppt_path)   #复制PPT到备份文件夹，并尝试保留元数据（如修改时间等）
             copyendtime=datetime.datetime.now()   #记录复制操作结束时间
@@ -606,7 +659,12 @@ def save_open_WPS_files(ppt_save_folder):   #定义WPS保存函数，参数ppt_s
         
         for idx in range(1, WPSpresentations.Count + 1):   #遍历PPT实例集合
             ppt = WPSpresentations.Item(idx)   #获取当前PPT实例
-            log_print('Start to backup ' + WPS_ppt_name + ' to ' + ppt_save_folder)   #打印备份开始信息
+            WPS_ppt_path = ppt.FullName   #获取PPT文件的完整路径
+            WPS_ppt_name = os.path.basename(WPS_ppt_path)   #提取文件名
+            WPS_new_ppt_path = os.path.join(ppt_save_folder, WPS_ppt_name)   #生成备份路径
+            log_print('Start to backup ' + WPS_ppt_name + ' to ' + ppt_save_folder + ' using SaveAs method')   #打印备份开始信息
+            # 如果目标文件存在，先移除只读属性
+            remove_readonly(WPS_new_ppt_path)
             savestarttime=datetime.datetime.now()   #记录保存操作开始时间
             ppt.SaveAs(WPS_new_ppt_path)   #使用SaveAs方法保存当前PPT实例到指定路径
             saveendtime=datetime.datetime.now()   #记录保存操作结束时间

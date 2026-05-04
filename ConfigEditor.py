@@ -730,6 +730,7 @@ class ConfigEditor:
                 "accurate_backup_enable": False,
                 "accurate_backup_source_path": "",
                 "accurate_backup_target_path": "",
+                "show_console_window_at_startup": True,
                 "save_log": True,
                 "archive_previous_log": True,
                 "backup_timeout": 600
@@ -771,11 +772,8 @@ class ConfigEditor:
         # 添加其他配置
         sections["精确备份"] = ["accurate_backup_enable", "accurate_backup_source_path", "accurate_backup_target_path"]
         
-        # 添加控制台和日志设置（如果适用）
-        if self.current_version != "6.0Core":
-            sections["界面与日志"] = ["show_console_window_at_startup", "save_log", "archive_previous_log"]
-        else:
-            sections["日志设置"] = ["save_log", "archive_previous_log"]
+        # 添加控制台和日志设置
+        sections["控制台与日志"] = ["show_console_window_at_startup", "save_log", "archive_previous_log"]
         
         # 添加超时和重试设置
         if self.current_version == "6.0":
