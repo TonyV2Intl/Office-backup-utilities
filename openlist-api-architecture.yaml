@@ -1,0 +1,92 @@
+openapi: 3.0.3
+info:
+  title: OpenList API
+servers:
+  - url: https://openlist.example.com
+paths:
+  /api/auth/login:
+    post:
+      tags:
+        - Auth
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+              required:
+                - username
+                - password
+      responses:
+        '200':
+          description: OK
+  /api/fs/mkdir:
+    post:
+      tags:
+        - File System
+      operationId: mkdir
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                path:
+                  type: string
+      responses:
+        '200':
+          description: OK
+  /api/fs/remove:
+    post:
+      tags:
+        - File System
+      operationId: remove
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                path:
+                  type: string
+                names:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: OK
+  /api/fs/put:
+    put:
+      tags:
+        - File System
+      operationId: upload
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
