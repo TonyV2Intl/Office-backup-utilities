@@ -93,7 +93,7 @@ jobs:
             # Check if it's Core version
             $isCore = $program -like "*Core*"
             if ($isCore) {
-              python -m nuitka --standalone --follow-imports --python-flag="-S" --main="$program" --remove-output --file-version="$version" --product-name="Office-Backup-Utilities-Core" --company-name="TonyV2Intl" --product-version="$version" --copyright="Copyright (C) 2026 TonyV2Intl" --onefile --msvc=14.0
+              python -m nuitka --standalone --follow-imports --python-flag="-S" --main="$program" --remove-output --windows-icon-from-ico="PythonLight.ico" --file-version="$version" --product-name="Office-Backup-Utilities-Core" --company-name="TonyV2Intl" --product-version="$version" --copyright="Copyright (C) 2026 TonyV2Intl" --onefile --msvc=14.0
             } else {
               python -m nuitka --standalone --follow-imports --python-flag="-S" --main="$program" --remove-output --windows-icon-from-ico="PythonLight.ico" --file-version="$version" --product-name="Office-Backup-Utilities" --company-name="TonyV2Intl" --product-version="$version" --copyright="Copyright (C) 2026 TonyV2Intl" --onefile --msvc=14.0
             }
