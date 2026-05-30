@@ -23,13 +23,13 @@ class ConfigEditor:
                 "cloud_section": "123云盘参数",
                 "cloud_params": ["client_id", "client_secret", "access_token", "folder_id"]
             },
-            "6.0": {
-                "config_file": "OBU6.0.json",
+            "6.1": {
+                "config_file": "OBU6.1.json",
                 "cloud_section": "OpenList参数",
                 "cloud_params": ["openlist_url", "openlist_username", "openlist_password", "openlist_target_folder"]
             },
-            "6.0Core": {
-                "config_file": "OBU6.0Core.json",
+            "6.1Core": {
+                "config_file": "OBU6.1Core.json",
                 "cloud_section": None,
                 "cloud_params": []
             }
@@ -89,7 +89,7 @@ class ConfigEditor:
         version_combobox = ttk.Combobox(
             version_frame, 
             textvariable=self.version_var, 
-            values=["5.0", "6.0", "6.0Core"],
+            values=["5.0", "6.1", "6.1Core"],
             state="readonly",
             width=10,
             takefocus=False
@@ -255,7 +255,7 @@ class ConfigEditor:
         test_version_combobox = ttk.Combobox(
             version_frame, 
             textvariable=self.test_version_var, 
-            values=["5.0", "6.0"],
+            values=["5.0", "6.1"],
             state="readonly",
             width=10,
             takefocus=False
@@ -457,8 +457,8 @@ class ConfigEditor:
                             ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
                         self.root.after(0, show_error)
             
-            # 测试 OpenList (版本 6.0)
-            elif version == "6.0":
+            # 测试 OpenList (版本 6.1)
+            elif version == "6.1":
                 openlist_url = config.get("openlist_url")
                 openlist_username = config.get("openlist_username")
                 openlist_password = config.get("openlist_password")
@@ -695,7 +695,7 @@ class ConfigEditor:
                 "show_console_window_at_startup": False,
                 "save_log": True
             }
-        elif self.current_version == "6.0":
+        elif self.current_version == "6.1":
             return {
                 "ppt_backup_path": "C:\\Officebackup\\pptbackup",
                 "word_backup_path": "C:\\Officebackup\\wordbackup",
@@ -719,7 +719,7 @@ class ConfigEditor:
                 "upload_retry_wait": 30,
                 "upload_max_retries": ""
             }
-        elif self.current_version == "6.0Core":
+        elif self.current_version == "6.1Core":
             return {
                 "ppt_backup_path": "C:\\Officebackup\\pptbackup",
                 "word_backup_path": "C:\\Officebackup\\wordbackup",
@@ -765,7 +765,7 @@ class ConfigEditor:
         if cloud_section and cloud_params:
             if self.current_version == "5.0":
                 sections["功能开关"].append("upload_to_123pan_enable")
-            elif self.current_version == "6.0":
+            elif self.current_version == "6.1":
                 sections["功能开关"].append("upload_to_openlist_enable")
             sections[cloud_section] = cloud_params
         
@@ -773,13 +773,13 @@ class ConfigEditor:
         sections["精确备份"] = ["accurate_backup_enable", "accurate_backup_source_path", "accurate_backup_target_path"]
         
         # 添加控制台和日志设置
-        if self.current_version == "6.0":
+        if self.current_version == "6.1":
             sections["界面与日志"] = ["hide_tray_icon", "show_console_window_at_startup", "save_log", "archive_previous_log"]
         else:
             sections["控制台与日志"] = ["show_console_window_at_startup", "save_log", "archive_previous_log"]
         
         # 添加超时和重试设置
-        if self.current_version == "6.0":
+        if self.current_version == "6.1":
             sections["超时与重试"] = ["backup_timeout", "upload_retry_wait", "upload_max_retries"]
         else:
             sections["超时设置"] = ["backup_timeout"]
@@ -988,8 +988,8 @@ class ConfigEditor:
         # 根据版本确定程序文件
         program_files = {
             "5.0": "OfficebackupSingle5.0",
-            "6.0": "Officebackup6.0",
-            "6.0Core": "Officebackup6.0Core"
+            "6.1": "Officebackup6.1",
+            "6.1Core": "Officebackup6.1Core"
         }
         
         if version in program_files:
