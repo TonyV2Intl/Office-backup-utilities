@@ -48,6 +48,7 @@ default_config = {
     "show_console_window_at_startup": False,   #程序启动时显示控制台窗口，True为显示，False为隐藏（默认）
     "save_log": True,   #是否保存日志到OBUlatest.log文件，True为保存（默认），False为不保存
     "archive_previous_log": True,   #是否在程序启动时归档之前的日志（重命名为OBUprevious.log），True为归档（默认），False为直接覆盖
+    "log_abnormal_upload": True,   #是否记录上传异常的文件到OBUabnormal.txt，True为记录（默认），False为不记录
     #超时和重试设置
     "backup_timeout": 600,   #备份操作超时时间，单位为秒（默认10分钟）
     "upload_retry_wait": 30,   #上传重试等待时间，单位为秒（默认30秒）
@@ -210,15 +211,8 @@ def upload_to_openlist_thread():   #在单独线程中执行上传操作
                             log_print('Upload to OpenList failed', source='openlist')
                     except Exception as e:
                         error_str = str(e)
-                        # 单独处理522错误（Cloudflare origin error），不输出详细信息
-                        if '522' in error_str:
-                            log_print('Upload failed: Server connection error (522), will retry in next upload', source='openlist')
-                        # 检查是否是 504 超时错误
-                        elif '504' in error_str or 'timeout' in error_str.lower():
-                            log_print('Server timeout error, will retry in next upload', source='openlist')
-                        else:
-                            log_print('Upload failed: ' + error_str, source='openlist')
-                            log_print('Upload failed, will retry in next upload', source='openlist')
+                        log_print('Upload failed: ' + error_str, source='openlist')
+                        log_print('Upload failed, will retry in next upload', source='openlist')
                     
                     return upload_result
                 
@@ -242,12 +236,12 @@ def upload_to_openlist_thread():   #在单独线程中执行上传操作
                 
             except Exception as e:
                 error_str = str(e)
-                # 单独处理522错误（Cloudflare origin error），不输出完整traceback
-                if '522' in error_str:
-                    log_print('Upload to OpenList failed: Server connection error (522), will retry in next upload', source='openlist')
-                else:
-                    log_print('Upload to OpenList failed: ' + error_str, source='openlist')
-                    log_print('Traceback: ' + traceback.format_exc(), source='openlist')
+                log_print('Upload to OpenList failed: ' + error_str, source='openlist')
+                log_print('Traceback: ' + traceback.format_exc(), source='openlist')
+                # 记录异常文件到OBUabnormal.txt
+                if config.get('log_abnormal_upload'):
+                    with open('OBUabnormal.txt', 'a', encoding='utf-8') as f:
+                        f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {upload_file} - {error_str}\n")
                 # 发生错误时，保留文件在队列中，等待下次上传
                 upload_end_time=datetime.datetime.now()   #记录上传操作结束时间
                 upload_used_time=upload_end_time-upload_start_time   #计算上传所用时间

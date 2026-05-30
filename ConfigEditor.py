@@ -715,6 +715,7 @@ class ConfigEditor:
                 "show_console_window_at_startup": False,
                 "save_log": True,
                 "archive_previous_log": True,
+                "log_abnormal_upload": True,
                 "backup_timeout": 600,
                 "upload_retry_wait": 30,
                 "upload_max_retries": ""
@@ -774,7 +775,7 @@ class ConfigEditor:
         
         # 添加控制台和日志设置
         if self.current_version == "6.1":
-            sections["界面与日志"] = ["hide_tray_icon", "show_console_window_at_startup", "save_log", "archive_previous_log"]
+            sections["界面与日志"] = ["hide_tray_icon", "show_console_window_at_startup", "save_log", "archive_previous_log", "log_abnormal_upload"]
         else:
             sections["控制台与日志"] = ["show_console_window_at_startup", "save_log", "archive_previous_log"]
         
@@ -968,6 +969,7 @@ class ConfigEditor:
             "show_console_window_at_startup": "启动时显示控制台",
             "save_log": "保存日志",
             "archive_previous_log": "归档之前的日志",
+            "log_abnormal_upload": "记录上传异常文件",
             "backup_timeout": "备份超时时间(秒)",
             "upload_retry_wait": "上传重试等待(秒)",
             "upload_max_retries": "上传最大重试次数"

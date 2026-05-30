@@ -1,0 +1,190 @@
+name: Nuitka Packaging
+
+on:
+  workflow_dispatch:
+    inputs:
+      package_main_program:
+        description: 'Package main program(s)'
+        required: true
+        type: boolean
+        default: true
+      main_programs:
+        description: 'Main programs to package (comma-separated list, e.g. Officebackup6.1.py,Officebackup6.1Core.py)'
+        required: false
+      package_config_editor:
+        description: 'Package ConfigEditor.py'
+        required: true
+        type: boolean
+        default: true
+      version:
+        description: 'Version number to use for the build (must be a tuple of up to 4 integer values, e.g. 6.1)'
+        required: true
+
+jobs:
+  build_main_program:
+    name: Build Main Program
+    if: ${{ inputs.package_main_program && inputs.main_programs != '' }}
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v6
+    
+    - name: Set up Python (3.8, x64)
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.8'
+        architecture: 'x64'
+    
+    - name: Cache Python dependencies
+      uses: actions/cache@v5
+      with:
+        path: |
+          ~\AppData\Local\pip\Cache
+          ~\AppData\Roaming\Python\Python38\site-packages
+        key: ${{ runner.os }}-python-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-python-
+    
+    - name: Cache Nuitka dependencies
+      uses: actions/cache@v5
+      with:
+        path: |
+          ~\AppData\Local\Nuitka\Nuitka\Cache
+        key: ${{ runner.os }}-nuitka-${{ hashFiles('**/*.py') }}
+        restore-keys: |
+          ${{ runner.os }}-nuitka-
+    
+    - name: Install Visual Studio Build Tools 2015 (14.0)
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        toolset: 14.0
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -U nuitka==1.9.5
+        pip install -r requirements.txt
+
+    - name: Download Dependency Walker manually
+      run: |
+        # Create cache directory for Nuitka
+        $cacheDir = "C:\Users\runneradmin\AppData\Local\Nuitka\Nuitka\Cache\downloads\depends\x86_64"
+        New-Item -ItemType Directory -Path $cacheDir -Force
+        
+        # Check if Dependency Walker is already cached
+        if (-not (Test-Path "$cacheDir\depends.exe")) {
+          # Download Dependency Walker
+          Invoke-WebRequest -Uri "https://dependencywalker.com/depends22_x64.zip" -OutFile "$cacheDir\depends.zip"
+          
+          # Extract the zip file
+          Expand-Archive -Path "$cacheDir\depends.zip" -DestinationPath $cacheDir -Force
+        }
+        
+        # Verify the files exist
+        Get-ChildItem -Path $cacheDir
+    
+    - name: Package main programs with Nuitka
+      run: |
+        $programs = "${{ inputs.main_programs }}".Split(",") | ForEach-Object { $_.Trim() }
+        $version = "${{ inputs.version }}"
+        foreach ($program in $programs) {
+          if (Test-Path $program) {
+            Write-Host "Packaging $program with version $version..."
+            # Check if it's Core version
+            $isCore = $program -like "*Core*"
+            if ($isCore) {
+              python -m nuitka --standalone --follow-imports --python-flag="-S" --main="$program" --remove-output --file-version="$version" --product-name="Office-Backup-Utilities-Core" --company-name="TonyV2Intl" --product-version="$version" --copyright="Copyright (C) 2026 TonyV2Intl" --onefile --msvc=14.0
+            } else {
+              python -m nuitka --standalone --follow-imports --python-flag="-S" --main="$program" --remove-output --windows-icon-from-ico="PythonLight.ico" --file-version="$version" --product-name="Office-Backup-Utilities" --company-name="TonyV2Intl" --product-version="$version" --copyright="Copyright (C) 2026 TonyV2Intl" --onefile --msvc=14.0
+            }
+          } else {
+            Write-Warning "File $program not found, skipping..."
+          }
+        }
+    
+    - name: Upload main program artifacts
+      uses: actions/upload-artifact@v7
+      with:
+        name: OBU-main-program-nuitka-packages
+        path: |
+          *.exe
+
+  build_config_editor:
+    name: Build Config Editor
+    if: ${{ inputs.package_config_editor }}
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v6
+    
+    - name: Set up Python (3.8, x64)
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.8'
+        architecture: 'x64'
+    
+    - name: Cache Python dependencies
+      uses: actions/cache@v5
+      with:
+        path: |
+          ~\AppData\Local\pip\Cache
+          ~\AppData\Roaming\Python\Python38\site-packages
+        key: ${{ runner.os }}-python-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-python-
+    
+    - name: Cache Nuitka dependencies
+      uses: actions/cache@v5
+      with:
+        path: |
+          ~\AppData\Local\Nuitka\Nuitka\Cache
+        key: ${{ runner.os }}-nuitka-${{ hashFiles('**/*.py') }}
+        restore-keys: |
+          ${{ runner.os }}-nuitka-
+    
+    - name: Install Visual Studio Build Tools 2015 (14.0)
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        toolset: 14.0
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -U nuitka==1.9.5
+        pip install -r requirements.txt
+
+    - name: Download Dependency Walker manually
+      run: |
+        # Create cache directory for Nuitka
+        $cacheDir = "C:\Users\runneradmin\AppData\Local\Nuitka\Nuitka\Cache\downloads\depends\x86_64"
+        New-Item -ItemType Directory -Path $cacheDir -Force
+        
+        # Check if Dependency Walker is already cached
+        if (-not (Test-Path "$cacheDir\depends.exe")) {
+          # Download Dependency Walker
+          Invoke-WebRequest -Uri "https://dependencywalker.com/depends22_x64.zip" -OutFile "$cacheDir\depends.zip"
+          
+          # Extract the zip file
+          Expand-Archive -Path "$cacheDir\depends.zip" -DestinationPath $cacheDir -Force
+        }
+        
+        # Verify the files exist
+        Get-ChildItem -Path $cacheDir
+    
+    - name: Package ConfigEditor with Nuitka
+      run: |
+        $version = "${{ inputs.version }}"
+        $program = "ConfigEditor.py"
+        if (Test-Path $program) {
+          Write-Host "Packaging $program with version $version..."
+          python -m nuitka --standalone --follow-imports --python-flag="-S" --main="$program" --remove-output --windows-icon-from-ico="PythonLight.ico" --file-version="$version" --product-name="Office-Backup-Utilities-Config-Editor" --company-name="TonyV2Intl" --product-version="$version" --copyright="Copyright (C) 2026 TonyV2Intl" --onefile --msvc=14.0 --windows-disable-console --enable-plugin=tk-inter
+        } else {
+          Write-Warning "File $program not found, skipping..."
+        }
+    
+    - name: Upload Config Editor artifact
+      uses: actions/upload-artifact@v7
+      with:
+        name: ConfigEditor-nuitka-package
+        path: ConfigEditor.exe
+        archive: false
