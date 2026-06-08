@@ -475,7 +475,7 @@ class ConfigEditor:
                 else:
                     # 测试 OpenList 连通性
                     try:
-                        from alist import AListAsync, AListUser
+                        from alist131 import AListAsync, AListUser
                         import asyncio
                         import tempfile
                         import os as os_module
@@ -715,10 +715,11 @@ class ConfigEditor:
                 "show_console_window_at_startup": False,
                 "save_log": True,
                 "archive_previous_log": True,
-                "log_abnormal_upload": True,
+                "log_abnormal_upload": False,
                 "backup_timeout": 600,
                 "upload_retry_wait": 30,
-                "upload_max_retries": ""
+                "upload_max_retries": "",
+                "upload_cache_expire_seconds": 300
             }
         elif self.current_version == "6.1Core":
             return {
@@ -781,7 +782,7 @@ class ConfigEditor:
         
         # 添加超时和重试设置
         if self.current_version == "6.1":
-            sections["超时与重试"] = ["backup_timeout", "upload_retry_wait", "upload_max_retries"]
+            sections["超时与重试"] = ["backup_timeout", "upload_retry_wait", "upload_max_retries", "upload_cache_expire_seconds"]
         else:
             sections["超时设置"] = ["backup_timeout"]
         
@@ -972,7 +973,8 @@ class ConfigEditor:
             "log_abnormal_upload": "记录上传异常文件",
             "backup_timeout": "备份超时时间(秒)",
             "upload_retry_wait": "上传重试等待(秒)",
-            "upload_max_retries": "上传最大重试次数"
+            "upload_max_retries": "上传最大重试次数",
+            "upload_cache_expire_seconds": "上传缓存有效期(秒)"
         }
         
         if self.key_name_mode == "simple" and key in key_map:
