@@ -719,7 +719,7 @@ class ConfigEditor:
                 "backup_timeout": 600,
                 "upload_retry_wait": 30,
                 "upload_max_retries": "",
-                "upload_cache_expire_seconds": 300
+                "upload_cache_expire_seconds": 1800
             }
         elif self.current_version == "6.1Core":
             return {

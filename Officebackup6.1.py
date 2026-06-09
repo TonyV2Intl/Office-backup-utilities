@@ -53,7 +53,7 @@ default_config = {
     "backup_timeout": 600,   #备份操作超时时间，单位为秒（默认10分钟）
     "upload_retry_wait": 30,   #上传重试等待时间，单位为秒（默认30秒）
     "upload_max_retries": "",   #上传最大重试次数，默认为空，表示无限次重试
-    "upload_cache_expire_seconds": 300   #上传缓存有效期，单位为秒（默认5分钟）
+    "upload_cache_expire_seconds": 1800   #上传缓存有效期，单位为秒（默认30分钟）
 }
 try:   #读取配置文件
     with open('OBU6.1.json', 'r', encoding='utf-8') as f:   #尝试读取配置文件（只读）
@@ -121,7 +121,7 @@ def is_in_upload_queue(file_name):
     return any(item[0] == file_name for item in upload_queue)
 
 def is_file_recently_uploaded(file_name):   #检查文件是否在最近一段时间内上传过（时间由配置决定）
-    expire_seconds = config.get('upload_cache_expire_seconds', 300)
+    expire_seconds = config.get('upload_cache_expire_seconds', 1800)
     if file_name in uploaded_files_cache:
         upload_time = uploaded_files_cache[file_name]
         if time.time() - upload_time < expire_seconds:
