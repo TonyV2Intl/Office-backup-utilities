@@ -6,7 +6,7 @@
 源代码以MIT协议公开，全部有注释，欢迎研究、交流与改进  
 The source code is open under the MIT license and is fully annotated. Study, communications and modifications are welcome.  
 
-> [!IMPORTANT]
+> [!NOTE]
 > WPS的备份功能**理论上只支持WPS专业版，个人版不可用（除非劫持了Powerpoint的COM接口）**，且**只能备份PPT，不能备份Word**，WPS2019教育考试专用版经实测可用，可至<https://hellowindows.cn>中的Office/WPS分区下载，来自此网站的WPS2019教育考试专用版123云盘链接：<https://www.123pan.com/s/ZrzA-2UZgh>
 
 ## 版本选择
@@ -36,6 +36,12 @@ The source code is open under the MIT license and is fully annotated. Study, com
 
     ```shell
     pip install -U pywin32 Pillow pystray alist3==1.3.1
+    ```
+
+    也可在程序所在目录内使用：
+
+    ```shell
+    pip install -r requirements.txt
     ```
 
     如果是6.1Core版本，只需要安装pywin32库：  
@@ -86,10 +92,22 @@ The source code is open under the MIT license and is fully annotated. Study, com
 * `（切换到原始/简明键名）`：在 显示Json文件的原始键名 和 显示其对应的中文含义 之间切换
 * `一键启动`：启动当前版本的程序（需要同级目录下有对应版本程序的.py或.exe文件）  
 
-> [!NOTE]
-> 6.1版本中，若要启用Openlist上传功能，必须填入Openlist的服务器URL、用户名和目标文件夹路径（即`openlist_url`、`openlist_username`和`openlist_target_folder`三个配置项），程序启动时将校验参数完整性，若不完整将强制禁用Openlist上传功能  
-> 填入的Openlist用户必须至少拥有`写入内容（创建/上传/修改）`和`删除`权限  
+> [!IMPORTANT]
+>
+> 1. 6.1版本中，若要启用Openlist上传功能，必须填入Openlist的服务器URL、用户名和目标文件夹路径（即`openlist_url`、`openlist_username`和`openlist_target_folder`三个配置项），程序启动时将校验参数完整性，若不完整将强制禁用Openlist上传功能  
+> 2. 填入的Openlist用户必须至少拥有`写入内容（创建/上传/修改）`和`删除`权限  
 > ![Openlist用户配置](./ReadmeIMG/OpenlistUser.png "Openlist用户配置")  
+
+$~$
+
+> [!WARNING]
+> 如果Openlist上传时报413错误，请按下方步骤依次排查：
+>
+> 1. 如果使用了Nginx或Openresty进行反向代理，请确保配置文件（`Nginx.conf`）中的`client_max_body_size`参数设置为大于等于上传文件的大小（Nginx默认为1MB，绝对不够用），下方为1Panel的修改示例（改成了5000MB）：
+> ![1Panel-OpenResty配置](./ReadmeIMG/1PanelOpenresty.png "1Panel-Openresty配置")
+> 2. 如果使用的是Cloudflare Free计划的域名，免费版会有100MB的最大上传文件大小限制，必须关闭该条解析的小黄云（代理），使用仅DNS模式，确保请求不经过Cloudflare网络（尽管这样可能导致服务器IP暴露，但是没办法，无论是开启开发模式还是配置缓存绕过规则都是没有用的）
+> ![Cloudflare-仅DNS模式](./ReadmeIMG/CloudflareDNS.png "Cloudflare-仅DNS模式")
+> 3. 如果都不行或觉得不妥，建议直接通过IP加端口号访问，如有防火墙或安全组记得放开Openlist所在端口（若使用Docker部署，默认为5244）
 
 6.1版默认配置文件以及各配置项含义解释：  
 
@@ -109,7 +127,7 @@ The source code is open under the MIT license and is fully annotated. Study, com
     "openlist_url": "",   //OpenList服务器URL
     "openlist_username": "",   //OpenList用户名
     "openlist_password": "",   //OpenList密码
-    "openlist_target_folder": "",   //目标文件夹路径，根目录用"/"表示
+    "openlist_target_folder": "",   //目标文件夹路径（相对路径，根目录用"/"表示）
     //文件夹精确备份功能
     "accurate_backup_enable": false,
     "accurate_backup_source_path": "",
@@ -119,10 +137,12 @@ The source code is open under the MIT license and is fully annotated. Study, com
     "show_console_window_at_startup": false,   //程序启动时显示控制台窗口，True为显示，False为隐藏（默认）
     "save_log": true,   //是否保存日志到OBUlatest.log文件，True为保存（默认），False为不保存
     "archive_previous_log": true,   //是否在程序启动时归档之前的日志（重命名为OBUprevious.log），True为归档（默认），False为直接覆盖
+    "log_abnormal_upload": false,   //是否记录上传异常的文件到OBUabnormal.txt，True为记录，False为不记录（默认）
     //超时和重试设置
     "backup_timeout": 600,   //备份操作超时时间，单位为秒（默认10分钟）
     "upload_retry_wait": 30,   //上传重试等待时间，单位为秒（默认30秒）
-    "upload_max_retries": ""   //上传最大重试次数，默认为空，表示无限次重试
+    "upload_max_retries": "",   //上传最大重试次数，默认为空，表示无限次重试
+    "upload_cache_expire_seconds": 1800   //上传缓存有效期，单位为秒（默认为30分钟，与Openlist默认缓存有效期一致）
 }
 ```
 
@@ -207,7 +227,7 @@ The source code is open under the MIT license and is fully annotated. Study, com
 
 ·修复了开机自启后程序无法第一时间联网获取云盘token、标记token_aquired=False时出现的逻辑问题，**确保在任何情况下token_aquired和acccess_token变量都有定义**，避免在上传函数内第二次获取token时出现变量未定义错误导致程序直接终止
 
-### 2026-05-05凌晨（6.1发布）
+### 2026-05-05凌晨（6.0发布）
 
 1. **Openlist支持**：由于123云盘API不再对非会员用户开放，于是移除了对123云盘API的支持，**转而改用`alist3`库对接[Openlist](https://doc.oplist.org)**（一个著名的文件列表程序，支持50+种存储的挂载）；同时**将上传操作改为异步操作，在独立线程中运行**，避免阻塞主线程，支持配置最大重试次数和重试等待时间
 
@@ -226,3 +246,25 @@ The source code is open under the MIT license and is fully annotated. Study, com
 8. 优化导入语句顺序，将原先分散在文件各处的导入语句统一移到文件开头
 
 9. 全部使用Github Actions的Windows环境来进行Nuitka的.exe编译，使用MSVC14.0编译器以兼容Windows7
+
+### 2026-06-09（6.1发布）
+
+1. OpenList 上传机制完善
+·在校验文件MD5值发现文件未发生变化时，增加对文件是否存在于Openlist的检查，避免漏传
+·新增 `is_file_in_upload_queue()` 函数：检查文件是否已在上传队列中，避免重复入队
+·新增 `is_file_recently_uploaded()` 函数：检查文件是否在最近一段时间内已上传，避免重复上传相同文件
+·新增 `uploaded_files_cache` 缓存：将已上传成功的文件记录在本地缓存中并保留一段时间，避免服务器端文件索引延迟导致的重复上传
+·修复多上传线程并发问题：使用 `upload_thread_lock` 和 `upload_thread_running` 标志确保只有一个上传线程运行，在启动新线程前将会检查是否已存在相同文件的上传线程，避免重复创建
+
+2. 新增 `OBUabnormal.txt` 异常记录功能（默认关闭，可通过 `log_abnormal_upload` 配置项开启），所有上传错误都会被记录到该文件
+
+3. 新增配置项
+·`log_abnormal_upload` ：是否记录上传异常到 `OBUabnormal.txt` 文件
+·`upload_cache_expire_seconds` ：上传缓存有效期（默认为30分钟，与Openlist默认缓存有效期一致）
+
+4. 简化 `Officebackup6.1.py` 的异常处理逻辑与日志输出逻辑，并在日志开头添加了版权信息和当前会话开始运行的时间戳
+
+5. 仓库相关内容更新
+·简化了Github Actions的打包配置，将主程序和Config Editor的打包都合并在单个工作流中管理
+·新增 `openlist-api-architecture.yaml` 文件，记录此程序使用到的 OpenList API 架构信息，可以用于相关平台的信息导入（例如Cloudflare API Shield，在导入时要将servers-url替换为自己的Openlist域名）
+·`.gitignore` 忽略 `*.txt` 文件（为了在开发环境下排除 `OBUabnormal.txt`），`requirements.txt` 移除了不需要的 svglib 和 rlpycairo 依赖

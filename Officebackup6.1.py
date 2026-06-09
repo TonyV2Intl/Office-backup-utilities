@@ -37,7 +37,7 @@ default_config = {
     "openlist_url": "",   #OpenList服务器URL
     "openlist_username": "",   #OpenList用户名
     "openlist_password": "",   #OpenList密码
-    "openlist_target_folder": "",   #目标文件夹路径，根目录用"/"表示
+    "openlist_target_folder": "",   #目标文件夹路径（相对路径，根目录用"/"表示）
     #文件夹精确备份功能
     "accurate_backup_enable": False,
     "accurate_backup_source_path": "",
@@ -53,7 +53,7 @@ default_config = {
     "backup_timeout": 600,   #备份操作超时时间，单位为秒（默认10分钟）
     "upload_retry_wait": 30,   #上传重试等待时间，单位为秒（默认30秒）
     "upload_max_retries": "",   #上传最大重试次数，默认为空，表示无限次重试
-    "upload_cache_expire_seconds": 1800   #上传缓存有效期，单位为秒（默认30分钟）
+    "upload_cache_expire_seconds": 1800   #上传缓存有效期，单位为秒（默认为30分钟，与Openlist默认缓存有效期一致）
 }
 try:   #读取配置文件
     with open('OBU6.1.json', 'r', encoding='utf-8') as f:   #尝试读取配置文件（只读）
@@ -117,7 +117,7 @@ upload_thread_lock = threading.Lock()  # 上传线程锁，确保只有一个上
 upload_thread_running = False  # 上传线程运行标志
 uploaded_files_cache = {}  # 已上传成功的文件缓存，{file_name: upload_timestamp}
 
-def is_in_upload_queue(file_name):
+def is_file_in_upload_queue(file_name):   #检查文件是否已在上传队列中，避免重复入队
     return any(item[0] == file_name for item in upload_queue)
 
 def is_file_recently_uploaded(file_name):   #检查文件是否在最近一段时间内上传过（时间由配置决定）
@@ -340,7 +340,7 @@ def check_file_exists_on_openlist(file_name):   #检查文件在Openlist上是�
                 log_print('Login to OpenList failed', source='openlist')
                 return False
             
-            # 检查文件是否存在
+            # 检查文件是否存在于Openlist
             try:
                 await client.get(target_file_path)
                 log_print('File exists on OpenList: ' + file_name, source='openlist')
@@ -519,7 +519,7 @@ def save_open_ppt_files(ppt_save_folder):   #定义ppt保存函数，参数ppt_s
                     log_print(ppt_name + ' has already existed in ' + ppt_save_folder + ', checking OpenList')
                     if config.get('upload_to_openlist_enable'):
                         if not check_file_exists_on_openlist(ppt_name):
-                            if not is_in_upload_queue(ppt_name):
+                            if not is_file_in_upload_queue(ppt_name):
                                 log_print(ppt_name + ' not found on OpenList, adding to upload queue')
                                 upload_queue.append((ppt_name,new_ppt_path))
                             else:
@@ -554,7 +554,7 @@ def save_open_ppt_files(ppt_save_folder):   #定义ppt保存函数，参数ppt_s
 
             # MD5不同，直接添加到上传队列（上传时会删除旧文件并重传）
             if config.get('upload_to_openlist_enable'):
-                if not is_in_upload_queue(ppt_name):
+                if not is_file_in_upload_queue(ppt_name):
                     log_print(ppt_name + ' not found on OpenList, adding to upload queue')
                     upload_queue.append((ppt_name,new_ppt_path))
                 else:
@@ -627,7 +627,7 @@ def save_open_word_files(word_save_folder):   #定义word保存函数，参数wo
                     log_print(doc_name + ' has already existed in ' + word_save_folder + ', checking OpenList')
                     if config.get('upload_to_openlist_enable'):
                         if not check_file_exists_on_openlist(doc_name):
-                            if not is_in_upload_queue(doc_name):
+                            if not is_file_in_upload_queue(doc_name):
                                 log_print(doc_name + ' not found on OpenList, adding to upload queue')
                                 upload_queue.append((doc_name,new_doc_path))
                             else:
@@ -662,7 +662,7 @@ def save_open_word_files(word_save_folder):   #定义word保存函数，参数wo
 
             # MD5不同，直接添加到上传队列（上传时会删除旧文件并重传）
             if config.get('upload_to_openlist_enable'):
-                if not is_in_upload_queue(doc_name):
+                if not is_file_in_upload_queue(doc_name):
                     log_print(doc_name + ' not found on OpenList, adding to upload queue')
                     upload_queue.append((doc_name,new_doc_path))
                 else:
@@ -735,7 +735,7 @@ def save_open_WPS_files(ppt_save_folder):   #定义WPS保存函数，参数ppt_s
                     log_print(WPS_ppt_name + ' has already existed in ' + ppt_save_folder + ', checking OpenList')
                     if config.get('upload_to_openlist_enable'):
                         if not check_file_exists_on_openlist(WPS_ppt_name):
-                            if not is_in_upload_queue(WPS_ppt_name):
+                            if not is_file_in_upload_queue(WPS_ppt_name):
                                 log_print(WPS_ppt_name + ' not found on OpenList, adding to upload queue')
                                 upload_queue.append((WPS_ppt_name,WPS_new_ppt_path))
                             else:
@@ -770,7 +770,7 @@ def save_open_WPS_files(ppt_save_folder):   #定义WPS保存函数，参数ppt_s
 
             # MD5不同，直接添加到上传队列（上传时会删除旧文件并重传）
             if config.get('upload_to_openlist_enable'):
-                if not is_in_upload_queue(WPS_ppt_name):
+                if not is_file_in_upload_queue(WPS_ppt_name):
                     log_print(WPS_ppt_name + ' not found on OpenList, adding to upload queue')
                     upload_queue.append((WPS_ppt_name,WPS_new_ppt_path))
                 else:
