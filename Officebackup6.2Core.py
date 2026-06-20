@@ -257,9 +257,8 @@ def save_open_ppt_files(ppt_save_folder):   #定义ppt保存函数，参数ppt_s
             copy_end_time=datetime.datetime.now()   #记录复制操作结束时间
             copy_used_time=copy_end_time-copy_start_time  #计算复制所用时间
 
-            modified_time=os.path.getmtime(new_ppt_path)   #获取备份文件的修改时间
             current_time=time.time()   #获取当前时间
-            os.utime(new_ppt_path, (modified_time, current_time))   #将 修改时间 存储到 访问时间（参数1），将 当前系统时间 设为 修改时间（参数2），方便文件系统根据修改时间排序
+            os.utime(new_ppt_path, (os.path.getatime(new_ppt_path), current_time))   #设置修改时间为备份发生的时间，方便文件系统根据修改时间排序
 
             file_skip_count[ppt_name] = 0   #重置该文件的跳过计数器
             any_backup_performed = True   #标记本轮有备份操作
@@ -345,9 +344,8 @@ def save_open_word_files(word_save_folder):   #定义word保存函数，参数wo
             copy_end_time=datetime.datetime.now()   #记录复制操作结束时间
             copy_used_time=copy_end_time-copy_start_time  #计算复制所用时间
 
-            modified_time=os.path.getmtime(new_doc_path)   #获取备份文件的修改时间
             current_time=time.time()   #获取当前时间
-            os.utime(new_doc_path, (modified_time, current_time))   #将修改时间存储到访问时间（参数1），创建时间存储到修改时间（参数2），方便文件系统根据修改时间排序
+            os.utime(new_doc_path, (os.path.getatime(new_doc_path), current_time))   #设置修改时间为备份发生的时间，方便文件系统根据修改时间排序
 
             file_skip_count[doc_name] = 0   #重置该文件的跳过计数器
             any_backup_performed = True   #标记本轮有备份操作
@@ -433,9 +431,8 @@ def save_open_WPS_files(ppt_save_folder):   #定义WPS保存函数，参数ppt_s
             copyendtime=datetime.datetime.now()   #记录复制操作结束时间
             copyusedtime=copyendtime-copystarttime  #计算复制所用时间
 
-            modified_time=os.path.getmtime(WPS_new_ppt_path)   #获取备份文件的修改时间
-            create_time=os.path.getctime(WPS_new_ppt_path)   #获取备份文件的创建时间
-            os.utime(WPS_new_ppt_path, (modified_time, create_time))   #将修改时间存储到访问时间（参数1），创建时间存储到修改时间（参数2），方便文件系统根据修改时间排序
+            current_time=time.time()   #获取当前时间
+            os.utime(WPS_new_ppt_path, (os.path.getatime(WPS_new_ppt_path), current_time))   #设置修改时间为备份发生的时间，方便文件系统根据修改时间排序
 
             file_skip_count[WPS_ppt_name] = 0   #重置该文件的跳过计数器
             any_backup_performed = True   #标记本轮有备份操作

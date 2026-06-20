@@ -119,7 +119,15 @@ openlist_ready = False  # OpenList初始化完成标志
 accurate_backup_running = False  # 精确备份线程运行标志
 
 def is_file_in_upload_queue(file_name):   #检查文件是否已在上传队列中，避免重复入队
-    return any(item[0] == file_name for item in upload_queue)
+    with upload_thread_lock:
+        return any(item[0] == file_name for item in upload_queue)
+
+def add_to_upload_queue(file_name, file_path):   #原子性地添加文件到上传队列（检查+添加在同一锁内）
+    with upload_thread_lock:
+        if any(item[0] == file_name for item in upload_queue):
+            return False
+        upload_queue.append((file_name, file_path))
+        return True
 
 def is_file_on_openlist(file_name):   #检查文件是否存在于远端OpenList目标文件夹中（使用本地缓存）
     return file_name in openlist_remote_files
@@ -270,8 +278,9 @@ def upload_to_openlist_thread():   #在单独线程中执行上传操作
                     upload_end_time=datetime.datetime.now()   #记录上传操作结束时间
                     upload_used_time=upload_end_time-upload_start_time   #计算上传所用时间
                     log_print('Upload to OpenList finished: ' + upload_file + ' in ' + str(upload_used_time) + ' s', source='openlist')
-                    if (upload_file, upload_source_path) in upload_queue:
-                        upload_queue.remove((upload_file, upload_source_path))
+                    with upload_thread_lock:
+                        if (upload_file, upload_source_path) in upload_queue:
+                            upload_queue.remove((upload_file, upload_source_path))
                     openlist_remote_files.add(upload_file)
                 else:
                     # 上传失败，保留文件在队列中，等待下次上传
@@ -598,13 +607,19 @@ def save_open_ppt_files(ppt_save_folder):   #定义ppt保存函数，参数ppt_s
                 
                 # 只有当两个MD5都成功计算且相同时才跳过
                 if original_md5 and backup_md5 and original_md5 == backup_md5:
+                    # 本次会话中首次出现该文件时，更新修改时间为当前时间
+                    if not Existed_in_this_session[ppt_name]:
+                        Existed_in_this_session[ppt_name] = True
+                        current_time = time.time()
+                        os.utime(new_ppt_path, (os.path.getatime(new_ppt_path), current_time))
+                        log_print(ppt_name + ' first appeared in this session, updated modification time')
+                    
                     # MD5值相同，检查Openlist是否需要上传
                     log_print(ppt_name + ' has already existed in ' + ppt_save_folder + ', checking OpenList')
                     if config.get('upload_to_openlist_enable'):
                         if not check_file_exists_on_openlist(ppt_name):
-                            if not is_file_in_upload_queue(ppt_name):
+                            if add_to_upload_queue(ppt_name, new_ppt_path):
                                 log_print(ppt_name + ' not found on OpenList, adding to upload queue')
-                                upload_queue.append((ppt_name,new_ppt_path))
                             else:
                                 log_print(ppt_name + ' already in upload queue, skipped')
                         else:
@@ -627,9 +642,8 @@ def save_open_ppt_files(ppt_save_folder):   #定义ppt保存函数，参数ppt_s
             copy_end_time=datetime.datetime.now()   #记录复制操作结束时间
             copy_used_time=copy_end_time-copy_start_time  #计算复制所用时间
 
-            modified_time=os.path.getmtime(new_ppt_path)   #获取备份文件的修改时间
             current_time=time.time()   #获取当前时间
-            os.utime(new_ppt_path, (modified_time, current_time))   #将 修改时间 存储到 访问时间（参数1），将 当前系统时间 设为 修改时间（参数2），方便文件系统根据修改时间排序
+            os.utime(new_ppt_path, (os.path.getatime(new_ppt_path), current_time))   #设置修改时间为备份发生的时间，方便文件系统根据修改时间排序
 
             file_skip_count[ppt_name] = 0   #重置该文件的跳过计数器
             any_backup_performed = True   #标记本轮有备份操作
@@ -637,9 +651,8 @@ def save_open_ppt_files(ppt_save_folder):   #定义ppt保存函数，参数ppt_s
 
             # MD5不同，直接添加到上传队列（上传时会删除旧文件并重传）
             if config.get('upload_to_openlist_enable'):
-                if not is_file_in_upload_queue(ppt_name):
+                if add_to_upload_queue(ppt_name, new_ppt_path):
                     log_print(ppt_name + ' not found on OpenList, adding to upload queue')
-                    upload_queue.append((ppt_name,new_ppt_path))
                 else:
                     log_print(ppt_name + ' already in upload queue, skipped')
         upload_to_openlist()  # 启动上传线程
@@ -667,7 +680,7 @@ def save_open_ppt_files(ppt_save_folder):   #定义ppt保存函数，参数ppt_s
             SaveAs_method_activated[ppt_name] = True   #标记该文件已激活SaveAs方法，后续不再备份
             log_print('Detected access control, activated SaveAs method, successfully backuped ' + ppt_name + ' to ' + ppt_save_folder + ' in ' + str(saveusedtime) + ' s')   #打印备份成功信息
 
-            upload_queue.append((ppt_name,new_ppt_path))  # 将文件名和备份路径添加到上传队列
+            add_to_upload_queue(ppt_name, new_ppt_path)  # 将文件名和备份路径添加到上传队列
             upload_to_openlist()  # 启动上传线程       
     except Exception as e:   #获取其他错误类型
             if type(e).__name__=='com_error':   #捕获无打开的PowerPoint实例而产生的的异常
@@ -706,13 +719,19 @@ def save_open_word_files(word_save_folder):   #定义word保存函数，参数wo
                 
                 # 只有当两个MD5都成功计算且相同时才跳过
                 if original_md5 and backup_md5 and original_md5 == backup_md5:
+                    # 本次会话中首次出现该文件时，更新修改时间为当前时间
+                    if not Existed_in_this_session[doc_name]:
+                        Existed_in_this_session[doc_name] = True
+                        current_time = time.time()
+                        os.utime(new_doc_path, (os.path.getatime(new_doc_path), current_time))
+                        log_print(doc_name + ' first appeared in this session, updated modification time')
+                    
                     # MD5值相同，检查Openlist是否需要上传
                     log_print(doc_name + ' has already existed in ' + word_save_folder + ', checking OpenList')
                     if config.get('upload_to_openlist_enable'):
                         if not check_file_exists_on_openlist(doc_name):
-                            if not is_file_in_upload_queue(doc_name):
+                            if add_to_upload_queue(doc_name, new_doc_path):
                                 log_print(doc_name + ' not found on OpenList, adding to upload queue')
-                                upload_queue.append((doc_name,new_doc_path))
                             else:
                                 log_print(doc_name + ' already in upload queue, skipped')
                         else:
@@ -735,9 +754,8 @@ def save_open_word_files(word_save_folder):   #定义word保存函数，参数wo
             copy_end_time=datetime.datetime.now()   #记录复制操作结束时间
             copy_used_time=copy_end_time-copy_start_time  #计算复制所用时间
 
-            modified_time=os.path.getmtime(new_doc_path)   #获取备份文件的修改时间
             current_time=time.time()   #获取当前时间
-            os.utime(new_doc_path, (modified_time, current_time))   #将修改时间存储到访问时间（参数1），创建时间存储到修改时间（参数2），方便文件系统根据修改时间排序
+            os.utime(new_doc_path, (os.path.getatime(new_doc_path), current_time))   #设置修改时间为备份发生的时间，方便文件系统根据修改时间排序
 
             file_skip_count[doc_name] = 0   #重置该文件的跳过计数器
             any_backup_performed = True   #标记本轮有备份操作
@@ -745,9 +763,8 @@ def save_open_word_files(word_save_folder):   #定义word保存函数，参数wo
 
             # MD5不同，直接添加到上传队列（上传时会删除旧文件并重传）
             if config.get('upload_to_openlist_enable'):
-                if not is_file_in_upload_queue(doc_name):
+                if add_to_upload_queue(doc_name, new_doc_path):
                     log_print(doc_name + ' not found on OpenList, adding to upload queue')
-                    upload_queue.append((doc_name,new_doc_path))
                 else:
                     log_print(doc_name + ' already in upload queue, skipped')
         upload_to_openlist()  # 启动上传线程
@@ -775,7 +792,7 @@ def save_open_word_files(word_save_folder):   #定义word保存函数，参数wo
             SaveAs_method_activated[doc_name] = True   #标记该文件已激活SaveAs方法，后续不再备份
             log_print('Detected access control, activated SaveAs method, successfully backuped ' + doc_name + ' to ' + word_save_folder + ' in ' + str(save_used_time) + ' s')   #打印备份成功信息
 
-            upload_queue.append((doc_name,new_doc_path))  # 将文件名和备份路径添加到上传队列
+            add_to_upload_queue(doc_name, new_doc_path)  # 将文件名和备份路径添加到上传队列
             upload_to_openlist()  # 启动上传线程
     except Exception as e:   #获取其他错误类型
             if type(e).__name__=='com_error':   #捕获无打开的PowerPoint实例而产生的的异常
@@ -814,13 +831,19 @@ def save_open_WPS_files(ppt_save_folder):   #定义WPS保存函数，参数ppt_s
                 
                 # 只有当两个MD5都成功计算且相同时才跳过
                 if original_md5 and backup_md5 and original_md5 == backup_md5:
+                    # 本次会话中首次出现该文件时，更新修改时间为当前时间
+                    if not Existed_in_this_session[WPS_ppt_name]:
+                        Existed_in_this_session[WPS_ppt_name] = True
+                        current_time = time.time()
+                        os.utime(WPS_new_ppt_path, (os.path.getatime(WPS_new_ppt_path), current_time))
+                        log_print(WPS_ppt_name + ' first appeared in this session, updated modification time')
+                    
                     # MD5值相同，检查Openlist是否需要上传
                     log_print(WPS_ppt_name + ' has already existed in ' + ppt_save_folder + ', checking OpenList')
                     if config.get('upload_to_openlist_enable'):
                         if not check_file_exists_on_openlist(WPS_ppt_name):
-                            if not is_file_in_upload_queue(WPS_ppt_name):
+                            if add_to_upload_queue(WPS_ppt_name, WPS_new_ppt_path):
                                 log_print(WPS_ppt_name + ' not found on OpenList, adding to upload queue')
-                                upload_queue.append((WPS_ppt_name,WPS_new_ppt_path))
                             else:
                                 log_print(WPS_ppt_name + ' already in upload queue, skipped')
                         else:
@@ -843,9 +866,8 @@ def save_open_WPS_files(ppt_save_folder):   #定义WPS保存函数，参数ppt_s
             copyendtime=datetime.datetime.now()   #记录复制操作结束时间
             copyusedtime=copyendtime-copystarttime  #计算复制所用时间
 
-            modified_time=os.path.getmtime(WPS_new_ppt_path)   #获取备份文件的修改时间
-            create_time=os.path.getctime(WPS_new_ppt_path)   #获取备份文件的创建时间
-            os.utime(WPS_new_ppt_path, (modified_time, create_time))   #将修改时间存储到访问时间（参数1），创建时间存储到修改时间（参数2），方便文件系统根据修改时间排序
+            current_time=time.time()   #获取当前时间
+            os.utime(WPS_new_ppt_path, (os.path.getatime(WPS_new_ppt_path), current_time))   #设置修改时间为备份发生的时间，方便文件系统根据修改时间排序
 
             file_skip_count[WPS_ppt_name] = 0   #重置该文件的跳过计数器
             any_backup_performed = True   #标记本轮有备份操作
@@ -853,9 +875,8 @@ def save_open_WPS_files(ppt_save_folder):   #定义WPS保存函数，参数ppt_s
 
             # MD5不同，直接添加到上传队列（上传时会删除旧文件并重传）
             if config.get('upload_to_openlist_enable'):
-                if not is_file_in_upload_queue(WPS_ppt_name):
+                if add_to_upload_queue(WPS_ppt_name, WPS_new_ppt_path):
                     log_print(WPS_ppt_name + ' not found on OpenList, adding to upload queue')
-                    upload_queue.append((WPS_ppt_name,WPS_new_ppt_path))
                 else:
                     log_print(WPS_ppt_name + ' already in upload queue, skipped')
         upload_to_openlist()  # 启动上传线程
@@ -883,7 +904,7 @@ def save_open_WPS_files(ppt_save_folder):   #定义WPS保存函数，参数ppt_s
             SaveAs_method_activated[WPS_ppt_name] = True   #标记该文件已激活SaveAs方法，后续不再备份
             log_print('Detected access control, activated SaveAs method, successfully backuped ' + WPS_ppt_name + ' to ' + ppt_save_folder + ' in ' + str(saveusedtime) + ' s')   #打印备份成功信息
 
-            upload_queue.append((WPS_ppt_name,WPS_new_ppt_path))  # 将文件名和备份路径添加到上传队列
+            add_to_upload_queue(WPS_ppt_name, WPS_new_ppt_path)  # 将文件名和备份路径添加到上传队列
         upload_to_openlist()  # 启动上传线程  
     except Exception as e:   #获取其他错误类型
             if type(e).__name__=='com_error':   #捕获无打开的WPS实例而产生的的异常

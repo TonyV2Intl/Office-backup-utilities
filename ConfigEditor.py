@@ -479,7 +479,7 @@ class ConfigEditor:
                 else:
                     # 测试 OpenList 连通性
                     try:
-                        from alist131 import AListAsync, AListUser
+                        from alist import AListAsync, AListUser
                         import asyncio
                         import tempfile
                         import os as os_module
