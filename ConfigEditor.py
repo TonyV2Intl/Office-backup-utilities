@@ -11,7 +11,7 @@ class ConfigEditor:
         self.root.geometry("700x450")
         self.root.resizable(True, True)
         # 设置窗口最小尺寸
-        self.root.minsize(700, 450)
+        self.root.minsize(800, 400)
         
         # 使用系统默认字体
         self.font = None
@@ -40,7 +40,6 @@ class ConfigEditor:
         self.original_config = {}
         self.history = []  # 用于撤销/恢复操作
         self.history_index = -1
-        self.unsaved_changes = False
         self.runid = 0
         
         # 键名显示模式
@@ -110,6 +109,7 @@ class ConfigEditor:
         ttk.Button(button_frame, text="重做(下一步)", command=self.redo, takefocus=False).pack(side=tk.RIGHT, padx=5, fill=tk.Y)
         ttk.Button(button_frame, text="撤销(上一步)", command=self.undo, takefocus=False).pack(side=tk.RIGHT, padx=5, fill=tk.Y)
         ttk.Button(button_frame, text="恢复默认配置", command=self.reset_to_default_config, takefocus=False).pack(side=tk.RIGHT, padx=5, fill=tk.Y)
+        ttk.Button(button_frame, text="刷新", command=self.refresh_config, takefocus=False).pack(side=tk.RIGHT, padx=5, fill=tk.Y)
         
         # 创建连通性测试界面
         self.create_test_widgets()
@@ -460,9 +460,17 @@ class ConfigEditor:
             # 测试 OpenList (版本 6.1)
             elif version == "6.1":
                 openlist_url = config.get("openlist_url")
+                if openlist_url:
+                    openlist_url = openlist_url.rstrip('/')
                 openlist_username = config.get("openlist_username")
                 openlist_password = config.get("openlist_password")
                 openlist_target_folder = config.get("openlist_target_folder", "/")
+                if openlist_target_folder:
+                    openlist_target_folder = openlist_target_folder.rstrip('/')
+                    if not openlist_target_folder.startswith('/'):
+                        openlist_target_folder = '/' + openlist_target_folder
+                if not openlist_target_folder or openlist_target_folder == '':
+                    openlist_target_folder = '/'
                 
                 if not openlist_url or not openlist_username:
                     def show_incomplete_params():
@@ -538,7 +546,10 @@ class ConfigEditor:
                                 f.write("Office Backup Utility Connectivity Test File\n")
                                 f.write(f"Test Time: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
                             
-                            target_file_path = openlist_target_folder.rstrip('/') + '/' + test_file_name if openlist_target_folder != "/" else '/' + test_file_name
+                            if openlist_target_folder == '/':
+                                target_file_path = '/' + test_file_name
+                            else:
+                                target_file_path = openlist_target_folder + '/' + test_file_name
                             
                             try:
                                 result_data['upload_success'] = await client.upload(target_file_path, test_file_path)
@@ -598,12 +609,6 @@ class ConfigEditor:
     def on_version_change(self):
         new_version = self.version_var.get()
         if new_version:
-            # 检查是否有未保存的更改
-            if self.unsaved_changes and new_version != self.current_version:
-                if not messagebox.askyesno("提示", "当前有未保存的更改，是否继续切换版本？"):
-                    self.version_var.set(self.current_version)
-                    return
-            
             self.current_version = new_version
             # 显示配置界面
             self.load_config()
@@ -611,6 +616,14 @@ class ConfigEditor:
         else:
             # 隐藏配置界面
             self.status_var.set("请选择版本")
+    
+    def refresh_config(self):
+        if not hasattr(self, 'current_version') or not self.current_version:
+            messagebox.showinfo("提示", "请先选择版本")
+            return
+        
+        self.load_config()
+        self.status_var.set(f"已刷新版本 {self.current_version} 的配置文件")
     
     def create_status_bar(self):
         # 状态栏
@@ -664,7 +677,6 @@ class ConfigEditor:
             # 重置历史记录
             self.history = [copy.deepcopy(self.config_data)]
             self.history_index = 0
-            self.unsaved_changes = False
             
             # 更新配置界面
             self.update_config_ui()
@@ -872,7 +884,6 @@ class ConfigEditor:
         try:
             self.save_config_to_file(self.config_data, config_file)
             self.original_config = copy.deepcopy(self.config_data)
-            self.unsaved_changes = False
             self.status_var.set(f"配置已保存到: {config_file}")
         except Exception as e:
             messagebox.showerror("错误", f"保存配置失败: {str(e)}")
@@ -920,7 +931,6 @@ class ConfigEditor:
             if len(self.history) > 50:
                 self.history.pop(0)
                 self.history_index -= 1
-            self.unsaved_changes = False
             self.update_config_ui()
             self.status_var.set("已恢复默认配置（可撤销）")
     
