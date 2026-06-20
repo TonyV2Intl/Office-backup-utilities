@@ -730,8 +730,7 @@ class ConfigEditor:
                 "log_abnormal_upload": False,
                 "backup_timeout": 600,
                 "upload_retry_wait": 30,
-                "upload_max_retries": "",
-                "upload_cache_expire_seconds": 1800
+                "upload_max_retries": ""
             }
         elif self.current_version == "6.1Core":
             return {
@@ -794,7 +793,7 @@ class ConfigEditor:
         
         # 添加超时和重试设置
         if self.current_version == "6.1":
-            sections["超时与重试"] = ["backup_timeout", "upload_retry_wait", "upload_max_retries", "upload_cache_expire_seconds"]
+            sections["超时与重试"] = ["backup_timeout", "upload_retry_wait", "upload_max_retries"]
         else:
             sections["超时设置"] = ["backup_timeout"]
         
@@ -844,6 +843,8 @@ class ConfigEditor:
                 entry_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
                 entry = ttk.Entry(entry_frame, textvariable=var, takefocus=False)
                 entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+                if key == "accurate_backup_target_path":
+                    ttk.Button(entry_frame, text="自动补全", command=lambda v=var: self.auto_complete_target_path(v), takefocus=False).pack(side=tk.LEFT, padx=2)
                 ttk.Button(entry_frame, text="浏览...", command=lambda v=var: self.browse_path(v), takefocus=False).pack(side=tk.LEFT, padx=5)
             else:
                 entry = ttk.Entry(frame, textvariable=var, takefocus=False)
@@ -855,6 +856,28 @@ class ConfigEditor:
             # 确保路径使用Windows格式的反斜杠
             path = path.replace('/', '\\')
             var.set(path)
+    
+    def auto_complete_target_path(self, var):
+        source_path = self.config_data.get("accurate_backup_source_path", "")
+        if not source_path:
+            messagebox.showinfo("提示", "请先设置精确备份源路径")
+            return
+        
+        source_path = os.path.normpath(source_path)
+        folder_name = os.path.basename(source_path)
+        if not folder_name:
+            messagebox.showinfo("提示", "无法从源路径提取文件夹名称")
+            return
+        
+        current_target = var.get()
+        if not current_target:
+            messagebox.showinfo("提示", "请先设置目标路径")
+            return
+        
+        current_target = os.path.normpath(current_target)
+        new_target = os.path.join(current_target, folder_name + "-backup")
+        new_target = new_target.replace('/', '\\')
+        var.set(new_target)
     
     def on_config_change(self, key, value):
         # 处理路径格式，确保Windows路径在JSON中正确保存
@@ -983,8 +1006,7 @@ class ConfigEditor:
             "log_abnormal_upload": "记录上传异常文件",
             "backup_timeout": "备份超时时间(秒)",
             "upload_retry_wait": "上传重试等待(秒)",
-            "upload_max_retries": "上传最大重试次数",
-            "upload_cache_expire_seconds": "上传缓存有效期(秒)"
+            "upload_max_retries": "上传最大重试次数"
         }
         
         if self.key_name_mode == "simple" and key in key_map:

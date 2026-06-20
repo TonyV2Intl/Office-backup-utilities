@@ -94,6 +94,7 @@ runid=0   #初始化运行计数器
 file_skip_count = defaultdict(int)   #使用字典记录每个文件的跳过次数（替代原全局skippedtime）
 SaveAs_method_activated = defaultdict(bool)  # 使用字典记录每个文件是否已激活SaveAs方法
 Existed_in_this_session = defaultdict(bool)  # 使用字典记录每个文件是否在本次运行中出现过，让之前会话中已经备份过的文件在程序重启后正常进行第一次备份
+accurate_backup_running = False  # 精确备份线程运行标志
 #从配置文件读取变量
 sleeptime=config.get('interval')   #轮询间隔（默认为60秒）
 ppt_save_folder=config.get('ppt_backup_path')   #ppt备份路径
@@ -472,20 +473,31 @@ def save_open_WPS_files(ppt_save_folder):   #定义WPS保存函数，参数ppt_s
 
 
 
-@timeout(seconds=600, config_key='backup_timeout')  # 添加10分钟超时机制
 def accurate_backup():   #定义精确备份函数
+    global accurate_backup_running
+    accurate_backup_running = True
     try:
         if os.path.exists(source_path):   #检查源文件夹是否存在
             log_print('Start accurate backup from ' + source_path + ' to ' + target_path)   #打印精确备份开始信息
             copy_start_time=datetime.datetime.now()   #记录复制操作开始时间
-            shutil.copytree(source_path, target_path)  # 复制源文件夹及其内容到目标文件夹
+            shutil.copytree(source_path, target_path, dirs_exist_ok=True)  # 复制源文件夹及其内容到目标文件夹
             copy_end_time=datetime.datetime.now()   #记录复制操作结束时间
             copy_used_time=copy_end_time-copy_start_time  #计算复制所用时间
             log_print(f'Accurate backup completed successfully from {source_path} to {target_path} in {copy_used_time} s')  # 打印精确备份完成信息
+            
+            config['accurate_backup_enable'] = False   #当前会话禁用精确备份功能
+            try:
+                with open('OBU6.1Core.json', 'w', encoding='utf-8') as f:
+                    json.dump(config, f, indent=4, ensure_ascii=False)
+                log_print('Accurate backup disabled after successful backup')
+            except Exception as e:
+                log_print('Failed to update config file: ' + str(e))
         else:
             log_print('Source path for accurate backup does not exist: ' + source_path + ', wait for the next request')  # 打印源文件夹不存在信息，等待下次请求
     except Exception as e:
         log_print('Accurate backup failed: ' + str(e))  # 打印精确备份失败信息
+    finally:
+        accurate_backup_running = False
 
 
 
@@ -503,6 +515,8 @@ while True:   #主线程无限循环，防止程序退出
         save_open_word_files(word_save_folder)   #启动线程
     if config.get('wps_backup_enable'):   #检查WPS备份功能是否启用
         save_open_WPS_files(ppt_save_folder)   #启动线程
-    if config.get('accurate_backup_enable'):  # 检查精确备份功能是否启用
-        accurate_backup()  # 启动线程
+    if config.get('accurate_backup_enable') and not accurate_backup_running:  # 检查精确备份功能是否启用且未在运行
+        backup_thread = threading.Thread(target=accurate_backup)
+        backup_thread.daemon = True
+        backup_thread.start()
     time.sleep(sleeptime)   #等待指定时间后继续轮询

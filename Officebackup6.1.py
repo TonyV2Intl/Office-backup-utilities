@@ -52,8 +52,7 @@ default_config = {
     #超时和重试设置
     "backup_timeout": 600,   #备份操作超时时间，单位为秒（默认10分钟）
     "upload_retry_wait": 30,   #上传重试等待时间，单位为秒（默认30秒）
-    "upload_max_retries": "",   #上传最大重试次数，默认为空，表示无限次重试
-    "upload_cache_expire_seconds": 1800   #上传缓存有效期，单位为秒（默认为30分钟，与Openlist默认缓存有效期一致）
+    "upload_max_retries": ""   #上传最大重试次数，默认为空，表示无限次重试
 }
 try:   #读取配置文件
     with open('OBU6.1.json', 'r', encoding='utf-8') as f:   #尝试读取配置文件（只读）
@@ -115,21 +114,15 @@ Existed_in_this_session = defaultdict(bool)  # 使用字典记录每个文件是
 upload_queue = []  # 初始化上传队列
 upload_thread_lock = threading.Lock()  # 上传线程锁，确保只有一个上传线程在运行
 upload_thread_running = False  # 上传线程运行标志
-uploaded_files_cache = {}  # 已上传成功的文件缓存，{file_name: upload_timestamp}
+openlist_remote_files = set()  # 远端OpenList目标文件夹中的文件列表（文件名集合）
+openlist_ready = False  # OpenList初始化完成标志
 accurate_backup_running = False  # 精确备份线程运行标志
 
 def is_file_in_upload_queue(file_name):   #检查文件是否已在上传队列中，避免重复入队
     return any(item[0] == file_name for item in upload_queue)
 
-def is_file_recently_uploaded(file_name):   #检查文件是否在最近一段时间内上传过（时间由配置决定）
-    expire_seconds = config.get('upload_cache_expire_seconds', 1800)
-    if file_name in uploaded_files_cache:
-        upload_time = uploaded_files_cache[file_name]
-        if time.time() - upload_time < expire_seconds:
-            return True
-        else:
-            del uploaded_files_cache[file_name]
-    return False
+def is_file_on_openlist(file_name):   #检查文件是否存在于远端OpenList目标文件夹中（使用本地缓存）
+    return file_name in openlist_remote_files
     
 #从配置文件读取变量
 sleeptime=config.get('interval')   #轮询间隔（默认为60秒）
@@ -279,8 +272,7 @@ def upload_to_openlist_thread():   #在单独线程中执行上传操作
                     log_print('Upload to OpenList finished: ' + upload_file + ' in ' + str(upload_used_time) + ' s', source='openlist')
                     if (upload_file, upload_source_path) in upload_queue:
                         upload_queue.remove((upload_file, upload_source_path))
-                    # 将文件添加到已上传缓存，避免服务器延迟导致重复上传
-                    uploaded_files_cache[upload_file] = time.time()
+                    openlist_remote_files.add(upload_file)
                 else:
                     # 上传失败，保留文件在队列中，等待下次上传
                     upload_end_time=datetime.datetime.now()   #记录上传操作结束时间
@@ -327,46 +319,89 @@ def upload_to_openlist_thread():   #在单独线程中执行上传操作
     upload_thread_running = False
     log_print('Upload thread finished', source='openlist')
 
-def check_file_exists_on_openlist(file_name):   #检查文件在Openlist上是否存在
+def check_file_exists_on_openlist(file_name):   #检查文件在Openlist上是否存在（使用本地缓存）
     if not config.get('upload_to_openlist_enable'):
         return False
     
-    # 先检查本地缓存，避免服务器延迟导致重复上传
-    if is_file_recently_uploaded(file_name):
-        log_print('File exists in upload cache: ' + file_name, source='openlist')
+    if is_file_on_openlist(file_name):
         return True
+    
+    return False
+
+def test_openlist_connection():   #测试OpenList连接（登录+目标文件夹验证）
+    if not config.get('upload_to_openlist_enable'):
+        return True
+    
+    if not openlist_url or not openlist_username:
+        log_print('OpenList configuration incomplete, upload function disabled for this session', source='openlist')
+        config['upload_to_openlist_enable'] = False
+        return False
     
     try:
         from alist import AListUser, AListAsync
+        import asyncio
         
-        async def async_check():
+        async def async_fetch_remote_files(client):
+            global openlist_remote_files
+            files_set = set()
+            page = 1
+            per_page = 100
+            
+            while True:
+                try:
+                    items = []
+                    async for item in client.list_dir(openlist_target_folder, page=page, per_page=per_page):
+                        items.append(item)
+                except Exception as e:
+                    log_print('Failed to fetch remote file list (page ' + str(page) + '): ' + str(e), source='openlist')
+                    break
+                
+                if not items:
+                    break
+                
+                for item in items:
+                    if not item.is_dir:
+                        file_name = str(item.path).split('/')[-1]
+                        if '\\' in file_name:
+                            file_name = file_name.split('\\')[-1]
+                        files_set.add(file_name)
+                
+                if len(items) < per_page:
+                    break
+                page += 1
+            
+            openlist_remote_files = files_set
+            log_print('Fetched ' + str(len(files_set)) + ' files from remote folder', source='openlist')
+            return True
+        
+        async def async_test():
             user = AListUser(openlist_username, openlist_password)
             client = AListAsync(openlist_url)
             
-            # 构造目标文件路径
-            if openlist_target_folder == '/':
-                target_file_path = '/' + file_name
-            else:
-                target_file_path = openlist_target_folder + '/' + file_name
-            
-            # 登录
             login_result = await client.login(user)
             if not login_result:
-                log_print('Login to OpenList failed', source='openlist')
+                log_print('OpenList login failed, please check username and password', source='openlist')
+                return False
+            log_print('OpenList login successful', source='openlist')
+            
+            try:
+                await client.mkdir(openlist_target_folder)
+                log_print('OpenList target folder validated: ' + openlist_target_folder, source='openlist')
+            except Exception as e:
+                log_print('OpenList target folder invalid: ' + openlist_target_folder + ', error: ' + str(e), source='openlist')
                 return False
             
-            # 检查文件是否存在于Openlist
-            try:
-                await client.get(target_file_path)
-                log_print('File exists on OpenList: ' + file_name, source='openlist')
-                return True
-            except Exception:
-                log_print('File does not exist on OpenList: ' + file_name, source='openlist')
-                return False
+            await async_fetch_remote_files(client)
+            return True
         
-        return asyncio.run(async_check())
+        result = asyncio.run(async_test())
+        if not result:
+            config['upload_to_openlist_enable'] = False
+            log_print('Upload function disabled for this session due to connection test failure', source='openlist')
+        return result
     except Exception as e:
-        log_print('Error checking file on OpenList: ' + str(e), source='openlist')
+        log_print('OpenList connection test failed: ' + str(e), source='openlist')
+        config['upload_to_openlist_enable'] = False
         return False
 
 def upload_to_openlist():   #启动上传线程
@@ -374,6 +409,9 @@ def upload_to_openlist():   #启动上传线程
     
     if not config.get('upload_to_openlist_enable'):   #检查上传功能是否启用
         return   #如果未启用，直接返回
+    
+    if not openlist_ready:   # OpenList初始化未完成，不启动上传线程
+        return
     
     # 使用锁确保只有一个上传线程在运行
     with upload_thread_lock:
@@ -385,14 +423,44 @@ def upload_to_openlist():   #启动上传线程
             upload_thread_running = True
             upload_thread.start()
 
+def init_openlist_async():   #后台初始化OpenList连接和文件列表
+    global openlist_ready
+    
+    if not config.get('upload_to_openlist_enable'):
+        openlist_ready = True
+        return
+    
+    log_print('OpenList initialization started in background', source='openlist')
+    result = test_openlist_connection()
+    
+    if result:
+        log_print('OpenList initialization completed', source='openlist')
+        # 清理上传队列中已存在于远端的文件，避免重复上传
+        removed_count = 0
+        with upload_thread_lock:
+            new_queue = []
+            for file_name, file_path in upload_queue:
+                if file_name in openlist_remote_files:
+                    removed_count += 1
+                    log_print('Skipped upload (already exists on remote): ' + file_name, source='openlist')
+                else:
+                    new_queue.append((file_name, file_path))
+            upload_queue[:] = new_queue
+        if removed_count > 0:
+            log_print('Removed ' + str(removed_count) + ' existing files from upload queue', source='openlist')
+    else:
+        log_print('OpenList initialization failed, upload function disabled', source='openlist')
+    
+    openlist_ready = True
+    
+    if upload_queue and config.get('upload_to_openlist_enable'):
+        upload_to_openlist()
+
 
 if config.get('upload_to_openlist_enable'):   #检查上传功能是否启用
     if not openlist_url or not openlist_username or not openlist_target_folder:   #检查OpenList配置是否完整（密码可为空）
         log_print('OpenList URL, username or target folder is empty, force disabled upload function, please provide valid credentials in the configuration file')
         config['upload_to_openlist_enable'] = False   #强制禁用上传功能
-    else:
-        # 启动上传线程
-        upload_to_openlist()
 
 if config.get('accurate_backup_enable'):  # 检查精确备份功能是否启用
     source_path = config.get('accurate_backup_source_path')   #获取源文件夹路径
@@ -922,7 +990,11 @@ def global_exception_handler(exctype, value, tb):   #处理全局未捕获异常
 sys.excepthook = global_exception_handler
 
 
-
+# 启动OpenList后台初始化线程
+if config.get('upload_to_openlist_enable'):
+    init_thread = threading.Thread(target=init_openlist_async)
+    init_thread.daemon = True
+    init_thread.start()
 
 
 print('Program initialization completed, entering main loop\n')
