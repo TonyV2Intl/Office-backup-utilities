@@ -11,25 +11,25 @@ The source code is open under the MIT license and is fully annotated. Study, com
 
 ## 版本选择
 
-**稳定版本：6.1（推荐，最新，功能全面）或4.2（经过长期使用，运行稳定，依赖项少）  
-6.1Core版本在仅保留6.1版本基本的本地备份功能与新特性的同时最小化了依赖项，可按需取用**
+**稳定版本：6.2（推荐，最新，功能全面）或4.2（经过长期使用，运行稳定，依赖项少）  
+6.2Core版本在仅保留6.2版本基本的本地备份功能与新特性的同时最小化了依赖项，可按需取用**
 
 |版本|本地备份|托盘图标|对接Openlist|对接123云盘|配置文件编辑器|
 |--|--|--|--|--|--|
-|**6.1**|✅（单个程序）|✅|✅|✅（可通过Openlist挂载）|✅|
-|**6.1Core**|✅（单个程序）|❌|❌|❌|✅|
+|**6.2**|✅（单个程序）|✅|✅|✅（可通过Openlist挂载）|✅|
+|**6.2Core**|✅（单个程序）|❌|❌|❌|✅|
 |5.0|✅（单个程序）|✅|❌|✅（直接通过Python对接）|✅|
 |4.2|✅（三个独立程序）|❌|❌|❌|❌|
 
 ## 使用方法
 
-### 6.1版本-直接运行（二进制文件）
+### 6.2版本-直接运行（二进制文件）
 
-1. 下载Release中的Officebackup6.1.exe（支持Windows7及以上系统）；如果要使用Openlist上传功能，请参照[官方文档](https://doc.oplist.org)**自行部署Openlist服务并挂载存储**，确保服务能在运行程序的环境下访问（除非是局域网访问（应该不可能），否则需要拥有公网可访问的域名/IP，或做好内网穿透）  
+1. 下载Release中的Officebackup6.2.exe（支持Windows7及以上系统）；如果要使用Openlist上传功能，请参照[官方文档](https://doc.oplist.org)**自行部署Openlist服务并挂载存储**，确保服务能在运行程序的环境下访问（除非是局域网访问（应该不可能），否则需要拥有公网可访问的域名/IP，或做好内网穿透）  
 2. 下载ConfigEditor.exe，放置在主程序的同级目录下，按需修改配置项，方法[见下](#配置文件编辑器config-editor)
 3. （可选）把程序放在某个隐蔽的角落，右键创建一个快捷方式，按win+r打开运行框，输入shell:startup，这个文件夹是Windows启动项的文件夹，把快捷方式丢进去就可以实现开机自动以最小化窗口运行（不能直接将程序放在此文件夹中，无法生效）
 
-### 6.1版本-从源码运行
+### 6.2版本-从源码运行
 
 1. 安装Python 3.8及以上版本  
 2. 在命令行中执行以下命令安装依赖：  
@@ -44,13 +44,13 @@ The source code is open under the MIT license and is fully annotated. Study, com
     pip install -r requirements.txt
     ```
 
-    如果是6.1Core版本，只需要安装pywin32库：  
+    如果是6.2Core版本，只需要安装pywin32库：  
 
     ```shell
     pip install pywin32
     ```
 
-3. 下载Officebackup6.1.py和ConfigEditor.py，放置在同级目录下，使用方法[同上](#61版本-直接运行二进制文件)  
+3. 下载Officebackup6.2.py和ConfigEditor.py，放置在同级目录下，使用方法[同上](#62版本-直接运行二进制文件)  
 
 ### 4.2版本-直接运行（二进制文件）
 
@@ -83,7 +83,7 @@ The source code is open under the MIT license and is fully annotated. Study, com
 
 ![ConfigEditor配置编辑页面](./ReadmeIMG/ConfigEditor1.png "ConfigEditor配置编辑页面")  
 
-在左上角选择程序对应的版本（6.1、6.1Core或5.0），在下方按需修改配置项，所有修改将实时保存到配置文件  
+在左上角选择程序对应的版本（6.2、6.2Core或5.0），在下方按需修改配置项，所有修改将实时保存到配置文件  
 
 在右上角可以进行这些操作：  
 
@@ -94,7 +94,7 @@ The source code is open under the MIT license and is fully annotated. Study, com
 
 > [!IMPORTANT]
 >
-> 1. 6.1版本中，若要启用Openlist上传功能，必须填入Openlist的服务器URL、用户名和目标文件夹路径（即`openlist_url`、`openlist_username`和`openlist_target_folder`三个配置项），程序启动时将校验参数完整性，若不完整将强制禁用Openlist上传功能  
+> 1. 6.2版本中，若要启用Openlist上传功能，必须填入Openlist的服务器URL、用户名和目标文件夹路径（即`openlist_url`、`openlist_username`和`openlist_target_folder`三个配置项），程序启动时将校验参数完整性，若不完整将强制禁用Openlist上传功能  
 > 2. 填入的Openlist用户必须至少拥有`写入内容（创建/上传/修改）`和`删除`权限  
 > ![Openlist用户配置](./ReadmeIMG/OpenlistUser.png "Openlist用户配置")  
 
@@ -109,7 +109,7 @@ $~$
 > ![Cloudflare-仅DNS模式](./ReadmeIMG/CloudflareDNS.png "Cloudflare-仅DNS模式")
 > 3. 如果都不行或觉得不妥，建议直接通过IP加端口号访问，如有防火墙或安全组记得放开Openlist所在端口（若使用Docker部署，默认为5244）
 
-6.1版默认配置文件以及各配置项含义解释：  
+6.2版默认配置文件以及各配置项含义解释：  
 
 ```json
 {
@@ -153,7 +153,7 @@ $~$
 在此页面中，可以测试COM接口和网络存储的连通性：  
 
 * COM接口测试：检查能否正常捕获Powerpoint、Word和WPS实例，若捕获到则会列出打开的文件名称  
-* 网络存储连通性测试：需要先在左侧选择对应版本（6.1对应Openlist，5.0对应123云盘API），并确保配置文件内的相关参数完整，然后运行测试：6.1版本会尝试登录Openlist账号，并创建一个临时文件，运行上传和删除测试；5.0版本会发送HTTP GET请求到<https://open.123pan.com/api/v1/file/list>，检查返回状态码是否为200
+* 网络存储连通性测试：需要先在左侧选择对应版本（6.2对应Openlist，5.0对应123云盘API），并确保配置文件内的相关参数完整，然后运行测试：6.2版本会尝试登录Openlist账号，并创建一个临时文件，运行上传和删除测试；5.0版本会发送HTTP GET请求到<https://open.123pan.com/api/v1/file/list>，检查返回状态码是否为200
 
 ## 程序由来
 
@@ -231,7 +231,7 @@ $~$
 
 1. **Openlist支持**：由于123云盘API不再对非会员用户开放，于是移除了对123云盘API的支持，**转而改用`alist3`库对接[Openlist](https://doc.oplist.org)**（一个著名的文件列表程序，支持50+种存储的挂载）；同时**将上传操作改为异步操作，在独立线程中运行**，避免阻塞主线程，支持配置最大重试次数和重试等待时间
 
-2. **超时检测机制**：实际测试中发现，在Windows7上以开机自启方式运行新版程序（6.1测试版）时，出现了运行一段时间后主线程死锁的问题，且每次开机都能稳定复现，如果不是在开机自启时运行的会话则不会出现死锁，且5.0版程序未发生过此类问题；针对该问题，**使用 `@timeout` 装饰器实现了超时检测功能**，在独立线程中针对四个备份操作函数（PPT、Word、WPS、文件夹精确备份）的执行时间计时，**如果超过阈值将强制结束当前程序并重启**，支持通过配置文件自定义超时时间
+2. **超时检测机制**：实际测试中发现，在Windows7上以开机自启方式运行新版程序（6.2测试版）时，出现了运行一段时间后主线程死锁的问题，且每次开机都能稳定复现，如果不是在开机自启时运行的会话则不会出现死锁，且5.0版程序未发生过此类问题；针对该问题，**使用 `@timeout` 装饰器实现了超时检测功能**，在独立线程中针对四个备份操作函数（PPT、Word、WPS、文件夹精确备份）的执行时间计时，**如果超过阈值将强制结束当前程序并重启**，支持通过配置文件自定义超时时间
 
 3. **MD5校验机制**：原先通过指定`max_skipping_time`配置项来判断重复出现的文件是否需要备份，不够智能；现在会**自动计算同名文件的MD5值并进行比较**，判断文件是否变化，只有文件变化才会备份，否则直接跳过
 
@@ -241,13 +241,13 @@ $~$
 
 6. 只读文件处理：新增`remove_readonly()`函数，备份前移除目标文件的只读属性
 
-7. 全功能主程序（6.1版本）可通过修改`hide_tray_icon`配置项来决定是否显示托盘图标
+7. 全功能主程序（6.2版本）可通过修改`hide_tray_icon`配置项来决定是否显示托盘图标
 
 8. 优化导入语句顺序，将原先分散在文件各处的导入语句统一移到文件开头
 
 9. 全部使用Github Actions的Windows环境来进行Nuitka的.exe编译，使用MSVC14.0编译器以兼容Windows7
 
-### 2026-06-09（6.1发布）
+### 2026-06-09（6.2发布）
 
 1. OpenList 上传机制完善
 ·在校验文件MD5值发现文件未发生变化时，增加对文件是否存在于Openlist的检查，避免漏传
@@ -262,7 +262,7 @@ $~$
 ·`log_abnormal_upload` ：是否记录上传异常到 `OBUabnormal.txt` 文件
 ·`upload_cache_expire_seconds` ：上传缓存有效期（默认为30分钟，与Openlist默认缓存有效期一致）
 
-4. 简化 `Officebackup6.1.py` 的异常处理逻辑与日志输出逻辑，并在日志开头添加了版权信息和当前会话开始运行的时间戳
+4. 简化 `Officebackup6.2.py` 的异常处理逻辑与日志输出逻辑，并在日志开头添加了版权信息和当前会话开始运行的时间戳
 
 5. 仓库相关内容更新
 ·简化了Github Actions的打包配置，将主程序和Config Editor的打包都合并在单个工作流中管理

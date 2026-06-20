@@ -9,7 +9,7 @@ on:
         type: boolean
         default: true
       main_programs:
-        description: 'Main programs to package (comma-separated list, e.g. Officebackup6.1.py,Officebackup6.1Core.py)'
+        description: 'Main programs to package (comma-separated list, e.g. Officebackup6.2.py,Officebackup6.2Core.py)'
         required: false
       package_config_editor:
         description: 'Package ConfigEditor.py'
@@ -17,7 +17,7 @@ on:
         type: boolean
         default: true
       version:
-        description: 'Version number to use for the build (must be a tuple of up to 4 integer values, e.g. 6.1)'
+        description: 'Version number to use for the build (must be a tuple of up to 4 integer values, e.g. 6.2)'
         required: true
 
 jobs:

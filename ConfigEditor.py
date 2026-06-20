@@ -8,7 +8,7 @@ class ConfigEditor:
     def __init__(self, root):
         self.root = root
         self.root.title("Office Backup Utility Config Editor")
-        self.root.geometry("700x450")
+        self.root.geometry("800x400")
         self.root.resizable(True, True)
         # 设置窗口最小尺寸
         self.root.minsize(800, 400)
@@ -23,13 +23,13 @@ class ConfigEditor:
                 "cloud_section": "123云盘参数",
                 "cloud_params": ["client_id", "client_secret", "access_token", "folder_id"]
             },
-            "6.1": {
-                "config_file": "OBU6.1.json",
+            "6.2": {
+                "config_file": "OBU6.2.json",
                 "cloud_section": "OpenList参数",
                 "cloud_params": ["openlist_url", "openlist_username", "openlist_password", "openlist_target_folder"]
             },
-            "6.1Core": {
-                "config_file": "OBU6.1Core.json",
+            "6.2Core": {
+                "config_file": "OBU6.2Core.json",
                 "cloud_section": None,
                 "cloud_params": []
             }
@@ -88,7 +88,7 @@ class ConfigEditor:
         version_combobox = ttk.Combobox(
             version_frame, 
             textvariable=self.version_var, 
-            values=["5.0", "6.1", "6.1Core"],
+            values=["5.0", "6.2", "6.2Core"],
             state="readonly",
             width=10,
             takefocus=False
@@ -255,7 +255,7 @@ class ConfigEditor:
         test_version_combobox = ttk.Combobox(
             version_frame, 
             textvariable=self.test_version_var, 
-            values=["5.0", "6.1"],
+            values=["5.0", "6.2"],
             state="readonly",
             width=10,
             takefocus=False
@@ -328,25 +328,21 @@ class ConfigEditor:
         # 测试 WPS
         try:
             import win32com.client
-            wps = win32com.client.Dispatch("KET.Application")
-            if wps.Visible:
-                documents = wps.Documents
-                if documents.Count > 0:
-                    # 找到文件，显示绿色
-                    wps_frame = ttk.LabelFrame(self.com_test_results_frame, text="WPS: 已打开")
-                    wps_frame.pack(fill=tk.X, padx=5, pady=2)
-                    for i in range(1, documents.Count + 1):
-                        document = documents(i)
-                        ttk.Label(wps_frame, text=f"  - {document.Name}", foreground="green").pack(anchor=tk.W, padx=10, pady=1)
-                else:
-                    # 已打开但无文件，显示绿色
-                    ttk.Label(self.com_test_results_frame, text="WPS: 已打开，但无文件", foreground="green").pack(anchor=tk.W, padx=5, pady=2)
+            wps = win32com.client.GetObject(Class="KWPP.Application")
+            presentations = wps.Presentations
+            if presentations.Count > 0:
+                # 找到文件，显示绿色
+                wps_frame = ttk.LabelFrame(self.com_test_results_frame, text="WPS: 已打开")
+                wps_frame.pack(fill=tk.X, padx=5, pady=2)
+                for i in range(1, presentations.Count + 1):
+                    presentation = presentations(i)
+                    ttk.Label(wps_frame, text=f"  - {presentation.Name}", foreground="green").pack(anchor=tk.W, padx=10, pady=1)
             else:
-                # 未打开，显示红色
-                ttk.Label(self.com_test_results_frame, text="WPS: 未打开", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+                # 已打开但无文件，显示绿色
+                ttk.Label(self.com_test_results_frame, text="WPS: 已打开，但无文件", foreground="green").pack(anchor=tk.W, padx=5, pady=2)
         except Exception as e:
-            # 错误，显示红色
-            ttk.Label(self.com_test_results_frame, text=f"WPS: 错误 - {str(e)}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+            # 未打开或错误，显示红色
+            ttk.Label(self.com_test_results_frame, text=f"WPS: 未打开或错误 - {str(e)}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
         
         # 计算测试用时
         end_time = time.time()
@@ -457,8 +453,8 @@ class ConfigEditor:
                             ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
                         self.root.after(0, show_error)
             
-            # 测试 OpenList (版本 6.1)
-            elif version == "6.1":
+            # 测试 OpenList (版本 6.2)
+            elif version == "6.2":
                 openlist_url = config.get("openlist_url")
                 if openlist_url:
                     openlist_url = openlist_url.rstrip('/')
@@ -707,7 +703,7 @@ class ConfigEditor:
                 "show_console_window_at_startup": False,
                 "save_log": True
             }
-        elif self.current_version == "6.1":
+        elif self.current_version == "6.2":
             return {
                 "ppt_backup_path": "C:\\Officebackup\\pptbackup",
                 "word_backup_path": "C:\\Officebackup\\wordbackup",
@@ -732,7 +728,7 @@ class ConfigEditor:
                 "upload_retry_wait": 30,
                 "upload_max_retries": ""
             }
-        elif self.current_version == "6.1Core":
+        elif self.current_version == "6.2Core":
             return {
                 "ppt_backup_path": "C:\\Officebackup\\pptbackup",
                 "word_backup_path": "C:\\Officebackup\\wordbackup",
@@ -778,7 +774,7 @@ class ConfigEditor:
         if cloud_section and cloud_params:
             if self.current_version == "5.0":
                 sections["功能开关"].append("upload_to_123pan_enable")
-            elif self.current_version == "6.1":
+            elif self.current_version == "6.2":
                 sections["功能开关"].append("upload_to_openlist_enable")
             sections[cloud_section] = cloud_params
         
@@ -786,13 +782,13 @@ class ConfigEditor:
         sections["精确备份"] = ["accurate_backup_enable", "accurate_backup_source_path", "accurate_backup_target_path"]
         
         # 添加控制台和日志设置
-        if self.current_version == "6.1":
+        if self.current_version == "6.2":
             sections["界面与日志"] = ["hide_tray_icon", "show_console_window_at_startup", "save_log", "archive_previous_log", "log_abnormal_upload"]
         else:
             sections["控制台与日志"] = ["show_console_window_at_startup", "save_log", "archive_previous_log"]
         
         # 添加超时和重试设置
-        if self.current_version == "6.1":
+        if self.current_version == "6.2":
             sections["超时与重试"] = ["backup_timeout", "upload_retry_wait", "upload_max_retries"]
         else:
             sections["超时设置"] = ["backup_timeout"]
@@ -1024,8 +1020,8 @@ class ConfigEditor:
         # 根据版本确定程序文件
         program_files = {
             "5.0": "OfficebackupSingle5.0",
-            "6.1": "Officebackup6.1",
-            "6.1Core": "Officebackup6.1Core"
+            "6.2": "Officebackup6.2",
+            "6.2Core": "Officebackup6.2Core"
         }
         
         if version in program_files:

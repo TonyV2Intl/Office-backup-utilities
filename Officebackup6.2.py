@@ -55,7 +55,7 @@ default_config = {
     "upload_max_retries": ""   #上传最大重试次数，默认为空，表示无限次重试
 }
 try:   #读取配置文件
-    with open('OBU6.1.json', 'r', encoding='utf-8') as f:   #尝试读取配置文件（只读）
+    with open('OBU6.2.json', 'r', encoding='utf-8') as f:   #尝试读取配置文件（只读）
         config = json.load(f)
     config_changed = False
     for key, value in default_config.items():   #如果现有配置文件有缺漏，根据默认配置项自动补全
@@ -63,11 +63,11 @@ try:   #读取配置文件
             config[key] = value
             config_changed = True
     if config_changed:   #如果配置文件有新增项，写回配置文件
-        with open('OBU6.1.json', 'w', encoding='utf-8') as f:
+        with open('OBU6.2.json', 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=4, ensure_ascii=False)
 except (FileNotFoundError, json.JSONDecodeError):   #若配置文件不存在或无法解析
     config = default_config   #使用默认配置
-    with open('OBU6.1.json', 'w', encoding='utf-8') as f:   #在当前目录下根据默认配置文件创建（写入）
+    with open('OBU6.2.json', 'w', encoding='utf-8') as f:   #在当前目录下根据默认配置文件创建（写入）
         json.dump(config, f, indent=4, ensure_ascii=False)   #写入默认配置文件
 
 
@@ -83,7 +83,7 @@ if config.get('save_log'):   #检查是否启用日志保存功能
             os.remove('OBUlatest.log')
     log_file = open('OBUlatest.log', 'a', encoding='utf-8')   #以追加模式打开日志文件
     # 写入版权信息和开始运行时间戳到控制台和日志文件
-    header = 'Office Backup Utilities 6.1\nCopyright (C) 2024-2026 TonyV2Intl\nSession starts at: ' + time.strftime('%Y-%m-%d %H:%M:%S')
+    header = 'Office Backup Utilities 6.2\nCopyright (C) 2024-2026 TonyV2Intl\nSession starts at: ' + time.strftime('%Y-%m-%d %H:%M:%S')
     print(header + '\n')
     log_file.write(header + '\n\n')
     log_file.flush()   #刷新文件缓冲区，确保日志消息立即写入文件
@@ -465,7 +465,7 @@ if config.get('upload_to_openlist_enable'):   #检查上传功能是否启用
 if config.get('accurate_backup_enable'):  # 检查精确备份功能是否启用
     source_path = config.get('accurate_backup_source_path')   #获取源文件夹路径
     target_path = config.get('accurate_backup_target_path')   #获取目标文件夹路径
-    if not source_path and target_path:   #如果精确备份功能开启但源路径为空或目标路径为空，则当前会话禁用精确备份功能
+    if not source_path or not target_path:   #如果精确备份功能开启但源路径为空或目标路径为空，则当前会话禁用精确备份功能
         log_print("Accurate backup disabled for this session, source path or target path for accurate backup is empty, please provide valid paths in the configuration file")
         config['accurate_backup_enable'] = False   #当前会话禁用（不修改配置文件）
 
@@ -897,6 +897,11 @@ def accurate_backup():   #定义精确备份函数
     global accurate_backup_running
     accurate_backup_running = True
     try:
+        source_path = config.get('accurate_backup_source_path')
+        target_path = config.get('accurate_backup_target_path')
+        if not source_path or not target_path:
+            log_print('Accurate backup source or target path is empty, skipped')
+            return
         if os.path.exists(source_path):   #检查源文件夹是否存在
             log_print('Start accurate backup from ' + source_path + ' to ' + target_path)   #打印精确备份开始信息
             copy_start_time=datetime.datetime.now()   #记录复制操作开始时间
@@ -907,7 +912,7 @@ def accurate_backup():   #定义精确备份函数
             
             config['accurate_backup_enable'] = False   #当前会话禁用精确备份功能
             try:
-                with open('OBU6.1.json', 'w', encoding='utf-8') as f:
+                with open('OBU6.2.json', 'w', encoding='utf-8') as f:
                     json.dump(config, f, indent=4, ensure_ascii=False)
                 log_print('Accurate backup disabled after successful backup')
             except Exception as e:
