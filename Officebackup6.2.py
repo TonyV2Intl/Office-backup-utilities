@@ -140,25 +140,32 @@ word_save_folder=config.get('word_backup_path')   #word备份路径
 
 
 
-try:   #尝试导入AList3SDK
-    from alist import AListUser, AListAsync   #导入AList3SDK，用于与OpenList/AList服务交互（1.3.1版本默认是同步API，需要指定使用AListAsync类已进行异步操作）
-except ImportError:
-    log_print("alist3 not found, upload function disabled for this session")
-    config['upload_to_openlist_enable'] = False   #当前会话禁用上传功能（不修改配置文件）
+# OpenList相关变量默认值
+openlist_url = ''
+openlist_username = ''
+openlist_password = ''
+openlist_target_folder = '/'
 
-# 从配置文件读取OpenList变量
-openlist_url = config.get('openlist_url')
-if openlist_url:
-    openlist_url = openlist_url.rstrip('/')
-openlist_username = config.get('openlist_username')
-openlist_password = config.get('openlist_password')
-openlist_target_folder = config.get('openlist_target_folder')
-if openlist_target_folder:
-    openlist_target_folder = openlist_target_folder.rstrip('/')
-    if not openlist_target_folder.startswith('/'):
-        openlist_target_folder = '/' + openlist_target_folder
-if not openlist_target_folder or openlist_target_folder == '':
-    openlist_target_folder = '/'
+if config.get('upload_to_openlist_enable'):   #只有启用上传功能时才进行相关初始化
+    try:   #尝试导入AList3SDK
+        from alist import AListUser, AListAsync   #导入AList3SDK，用于与OpenList/AList服务交互（1.3.1版本默认是同步API，需要指定使用AListAsync类已进行异步操作）
+    except ImportError:
+        log_print("alist3 not found, upload function disabled for this session")
+        config['upload_to_openlist_enable'] = False   #当前会话禁用上传功能（不修改配置文件）
+
+    # 从配置文件读取OpenList变量
+    openlist_url = config.get('openlist_url')
+    if openlist_url:
+        openlist_url = openlist_url.rstrip('/')
+    openlist_username = config.get('openlist_username')
+    openlist_password = config.get('openlist_password')
+    openlist_target_folder = config.get('openlist_target_folder')
+    if openlist_target_folder:
+        openlist_target_folder = openlist_target_folder.rstrip('/')
+        if not openlist_target_folder.startswith('/'):
+            openlist_target_folder = '/' + openlist_target_folder
+    if not openlist_target_folder or openlist_target_folder == '':
+        openlist_target_folder = '/'
 
 
 
@@ -574,343 +581,145 @@ def remove_readonly(file_path):
     except Exception as e:
         log_print(f"Error removing readonly from {file_path}: {e}")
 
+def _backup_open_files(save_folder, app_progid, use_get_object, collection_attr, file_type_label):   #通用备份函数，参数化不同Office应用的差异
+    global upload_queue   #声明全局上传队列变量
+    try:   #开始异常捕获
+        if not os.path.exists(save_folder):   #检查备份目录是否存在
+            os.makedirs(save_folder)   #若不存在则创建备份目录（包括所有必要的父目录）
+            log_print('Target backup folder not found, created: ' + save_folder + ' successfully')   #打印成功创建备份目录的信息
+        
+        if use_get_object:   #判断是否使用GetObject方式获取COM对象（WPS用）
+            app = win32.GetObject(Class=app_progid)   #使用GetObject获取已运行的Office应用实例
+        else:   #使用Dispatch方式（PPT/Word用）
+            app = win32.Dispatch(app_progid)   #启动或连接到Office应用实例
+        file_collection = getattr(app, collection_attr)   #获取应用中所有打开的文档集合
 
+        any_backup_performed = False   #标记本轮是否有任何备份操作
+        
+        for target_file in file_collection:   #遍历所有打开的文档
+            target_file_path = target_file.FullName   #获取文件的完整路径
+            target_file_name = os.path.basename(target_file_path)   #提取文件名
+            backup_file_path = os.path.join(save_folder, target_file_name)   #生成备份文件路径
 
+            if os.path.exists(backup_file_path):   #检查备份文件是否已存在
+                if SaveAs_method_activated[target_file_name] == True:   #如果SaveAs方法已被激活
+                    log_print(target_file_name + ' has already existed in ' + save_folder + ', skipped backup (SaveAs method activated)')   #打印跳过信息
+                    continue   #跳过此次备份
+                
+                original_md5 = calculate_md5(target_file_path)   #计算源文件的MD5值
+                backup_md5 = calculate_md5(backup_file_path)   #计算备份文件的MD5值
+                
+                if original_md5 and backup_md5 and original_md5 == backup_md5:   #两个MD5都成功计算且相同
+                    if not Existed_in_this_session[target_file_name]:   #本次会话中首次出现该文件
+                        Existed_in_this_session[target_file_name] = True   #标记为已出现过
+                        current_time = time.time()   #获取当前时间
+                        os.utime(backup_file_path, (os.path.getatime(backup_file_path), current_time))   #更新修改时间为当前时间
+                        log_print(target_file_name + ' first appeared in this session, updated modification time')   #打印时间更新日志
+                    
+                    if config.get('upload_to_openlist_enable'):   #检查是否启用了OpenList上传
+                        log_print(target_file_name + ' has already existed in ' + save_folder + ', checking OpenList')   #打印检查OpenList信息
+                        if not check_file_exists_on_openlist(target_file_name):   #检查文件是否存在于远端
+                            if add_to_upload_queue(target_file_name, backup_file_path):   #原子性添加到上传队列
+                                log_print(target_file_name + ' not found on OpenList, adding to upload queue')   #打印添加上传队列日志
+                            else:   #文件已在队列中
+                                log_print(target_file_name + ' already in upload queue, skipped')   #打印重复入队日志
+                        else:   #文件已在远端
+                            log_print(target_file_name + ' already exists on OpenList, skipped upload')   #打印跳过上传日志
+                    else:   #未启用OpenList上传
+                        log_print(target_file_name + ' has already existed in ' + save_folder + ', skipped backup (MD5 match)')   #打印MD5相同跳过信息
+                    continue   #跳过此次备份
+                elif original_md5 is None:   #源文件MD5计算失败（可能文件找不到）
+                    log_print(target_file_name + ' source file not found, skipping this backup')   #打印跳过信息
+                    continue   #跳过此次备份
+                else:   #MD5值不同，文件已修改
+                    log_print(target_file_name + ' has changed, backup will begin soon (MD5 mismatch)')   #打印文件变更信息
+            
+            Existed_in_this_session[target_file_name] = True   #标记该文件在本次会话中出现过
+            log_print('Start to backup ' + target_file_name + ' to ' + save_folder)   #打印备份开始信息
+            remove_readonly(backup_file_path)   #如果目标文件存在，先移除只读属性
+            copy_start_time = datetime.datetime.now()   #记录复制操作开始时间
+            shutil.copy2(target_file_path, backup_file_path)   #复制文件到备份文件夹，保留元数据
+            copy_end_time = datetime.datetime.now()   #记录复制操作结束时间
+            copy_used_time = copy_end_time - copy_start_time   #计算复制所用时间
+
+            current_time = time.time()   #获取当前时间
+            os.utime(backup_file_path, (os.path.getatime(backup_file_path), current_time))   #设置修改时间为备份发生的时间
+
+            file_skip_count[target_file_name] = 0   #重置该文件的跳过计数器
+            any_backup_performed = True   #标记本轮有备份操作
+            log_print('Successfully backuped ' + target_file_name + ' to ' + save_folder + ' in ' + str(copy_used_time) + ' s')   #打印备份成功信息
+
+            if config.get('upload_to_openlist_enable'):   #检查是否启用了OpenList上传
+                if add_to_upload_queue(target_file_name, backup_file_path):   #原子性添加到上传队列
+                    log_print(target_file_name + ' not found on OpenList, adding to upload queue')   #打印添加上传队列日志
+                else:   #文件已在队列中
+                    log_print(target_file_name + ' already in upload queue, skipped')   #打印重复入队日志
+        upload_to_openlist()   #启动上传线程
+
+        if not any_backup_performed and len(file_collection) == 0:   #没有可备份文件
+            log_print('No ' + file_type_label + ' available now (Normal request)')   #打印无文件信息
+
+    except FileNotFoundError:   #捕获移动存储介质移除导致的文件未找到异常，使用SaveAs方法备份
+        if not os.path.exists(save_folder):   #检查备份目录是否存在
+            os.makedirs(save_folder)   #若不存在则创建备份目录
+            log_print('Target backup folder not found, created: ' + save_folder + ' successfully')   #打印创建成功信息
+
+        for idx in range(1, file_collection.Count + 1):   #遍历文档集合（使用索引方式）
+            target_file = file_collection.Item(idx)   #获取当前文档对象
+            target_file_path = target_file.FullName   #获取文件完整路径
+            target_file_name = os.path.basename(target_file_path)   #提取文件名
+            backup_file_path = os.path.join(save_folder, target_file_name)   #生成备份路径
+            log_print('Start to backup ' + target_file_name + ' to ' + save_folder + ' using SaveAs method')   #打印SaveAs备份开始信息
+            remove_readonly(backup_file_path)   #移除目标文件只读属性
+            save_start_time = datetime.datetime.now()   #记录保存操作开始时间
+            target_file.SaveAs(backup_file_path)   #使用SaveAs方法保存文档到指定路径
+            save_end_time = datetime.datetime.now()   #记录保存操作结束时间
+            save_used_time = save_end_time - save_start_time   #计算保存所用时间
+            SaveAs_method_activated[target_file_name] = True   #标记该文件已激活SaveAs方法
+            log_print('Detected access control, activated SaveAs method, successfully backuped ' + target_file_name + ' to ' + save_folder + ' in ' + str(save_used_time) + ' s')   #打印SaveAs备份成功信息
+
+            add_to_upload_queue(target_file_name, backup_file_path)   #添加到上传队列
+            upload_to_openlist()   #启动上传线程
+    except Exception as e:   #捕获其他所有异常
+        if type(e).__name__ == 'com_error':   #如果是COM错误（无打开的应用实例）
+            log_print('No ' + file_type_label + ' available now (' + app_progid.split('.')[0] + ' application not detected)')   #打印应用未检测到信息
+        else:   #其他类型的错误
+            log_print('Exception: ' + type(e).__name__ + ', request continue')   #打印异常信息并继续
 
 
 @timeout(seconds=600, config_key='backup_timeout')  #添加10分钟超时机制
 def save_open_ppt_files(ppt_save_folder):   #定义ppt保存函数，参数ppt_save_folder是备份文件的存储路径
-    global upload_queue  # 声明全局上传队列变量
-    try:
-        if not os.path.exists(ppt_save_folder):   #检查ppt备份目录是否存在
-            os.makedirs(ppt_save_folder)   #若不存在则创建备份目录（包括所有必要的父目录）
-            log_print('Target backup folder not found, created: ' + ppt_save_folder + ' successfully')   #打印成功创建ppt备份目录的信息
-        
-        ppt_app=win32.Dispatch('PowerPoint.Application')   #启动一个PowerPoint实例
-        presentations = ppt_app.Presentations   #获取当前PowerPoint实例中所有打开的演示文稿集合
-
-        any_backup_performed = False   #标记本轮是否有任何备份操作（替代原haveppt）
-        
-        for ppt in presentations:   #遍历集合
-            ppt_path = ppt.FullName   #获取PPT文件的完整路径
-            ppt_name = os.path.basename(ppt_path)   #提取文件名
-            new_ppt_path = os.path.join(ppt_save_folder, ppt_name)   #生成备份路径
-
-            if os.path.exists(new_ppt_path):   #检查备份文件是否已存在
-                if SaveAs_method_activated[ppt_name] == True:   #如果SaveAs方法已被激活，则不再使用复制方法
-                    log_print(ppt_name + ' has already existed in ' + ppt_save_folder + ', skipped backup (SaveAs method activated)')   #打印跳过信息
-                    continue   #跳过此次备份
-                
-                # 计算原始文件和备份文件的MD5值
-                original_md5 = calculate_md5(ppt_path)
-                backup_md5 = calculate_md5(new_ppt_path)
-                
-                # 只有当两个MD5都成功计算且相同时才跳过
-                if original_md5 and backup_md5 and original_md5 == backup_md5:
-                    # 本次会话中首次出现该文件时，更新修改时间为当前时间
-                    if not Existed_in_this_session[ppt_name]:
-                        Existed_in_this_session[ppt_name] = True
-                        current_time = time.time()
-                        os.utime(new_ppt_path, (os.path.getatime(new_ppt_path), current_time))
-                        log_print(ppt_name + ' first appeared in this session, updated modification time')
-                    
-                    # MD5值相同，检查Openlist是否需要上传
-                    log_print(ppt_name + ' has already existed in ' + ppt_save_folder + ', checking OpenList')
-                    if config.get('upload_to_openlist_enable'):
-                        if not check_file_exists_on_openlist(ppt_name):
-                            if add_to_upload_queue(ppt_name, new_ppt_path):
-                                log_print(ppt_name + ' not found on OpenList, adding to upload queue')
-                            else:
-                                log_print(ppt_name + ' already in upload queue, skipped')
-                        else:
-                            log_print(ppt_name + ' already exists on OpenList, skipped upload')
-                    continue   #跳过此次备份
-                elif original_md5 is None:
-                    # 源文件找不到，跳过这次备份
-                    log_print(ppt_name + ' source file not found, skipping this backup')
-                    continue
-                else:
-                    # MD5值不同，需要备份
-                    log_print(ppt_name + ' has changed, backup will begin soon (MD5 mismatch)')
-            
-            Existed_in_this_session[ppt_name] = True   #标记该文件在本次会话中出现过
-            log_print('Start to backup ' + ppt_name + ' to ' + ppt_save_folder)   #打印备份开始信息
-            # 如果目标文件存在，先移除只读属性
-            remove_readonly(new_ppt_path)
-            copy_start_time=datetime.datetime.now()   #记录复制操作开始时间
-            shutil.copy2(ppt_path, new_ppt_path)   #复制PPT到备份文件夹，并尝试保留元数据（如修改时间等）
-            copy_end_time=datetime.datetime.now()   #记录复制操作结束时间
-            copy_used_time=copy_end_time-copy_start_time  #计算复制所用时间
-
-            current_time=time.time()   #获取当前时间
-            os.utime(new_ppt_path, (os.path.getatime(new_ppt_path), current_time))   #设置修改时间为备份发生的时间，方便文件系统根据修改时间排序
-
-            file_skip_count[ppt_name] = 0   #重置该文件的跳过计数器
-            any_backup_performed = True   #标记本轮有备份操作
-            log_print(f'Successfully backuped {ppt_name} to {ppt_save_folder} in {copy_used_time} s')   #打印备份成功信息
-
-            # MD5不同，直接添加到上传队列（上传时会删除旧文件并重传）
-            if config.get('upload_to_openlist_enable'):
-                if add_to_upload_queue(ppt_name, new_ppt_path):
-                    log_print(ppt_name + ' not found on OpenList, adding to upload queue')
-                else:
-                    log_print(ppt_name + ' already in upload queue, skipped')
-        upload_to_openlist()  # 启动上传线程
-
-        if not any_backup_performed and len(presentations) == 0:   #检查变量值，如果没有可备份PPT，打印此条信息
-            log_print('No ppt available now (Normal request)')   #打印运行信息
-
-    except FileNotFoundError:   #捕获由于U盘等移动存储介质被移除而导致的“文件未找到”异常，使用2.0版本中的SaveAs方法进行备份
-        if not os.path.exists(ppt_save_folder):   #检查ppt备份目录是否存在
-            os.makedirs(ppt_save_folder)   #若不存在则创建备份目录（包括所有必要的父目录）
-            log_print('Target backup folder not found, created: ' + ppt_save_folder + ' successfully')   #打印成功创建ppt备份目录的信息
-
-        for idx in range(1, presentations.Count + 1):   #遍历PPT实例集合
-            ppt = presentations.Item(idx)   #获取当前PPT实例
-            ppt_path = ppt.FullName   #获取PPT文件的完整路径
-            ppt_name = os.path.basename(ppt_path)   #提取文件名
-            new_ppt_path = os.path.join(ppt_save_folder, ppt_name)   #生成备份路径
-            log_print('Start to backup ' + ppt_name + ' to ' + ppt_save_folder + ' using SaveAs method')   #打印备份开始信息
-            # 如果目标文件存在，先移除只读属性
-            remove_readonly(new_ppt_path)
-            savestarttime=datetime.datetime.now()   #记录保存操作开始时间
-            ppt.SaveAs(new_ppt_path)   #使用SaveAs方法保存当前PPT实例到指定路径
-            saveendtime=datetime.datetime.now()   #记录保存操作结束时间
-            saveusedtime=saveendtime-savestarttime  #计算保存所用时间
-            SaveAs_method_activated[ppt_name] = True   #标记该文件已激活SaveAs方法，后续不再备份
-            log_print('Detected access control, activated SaveAs method, successfully backuped ' + ppt_name + ' to ' + ppt_save_folder + ' in ' + str(saveusedtime) + ' s')   #打印备份成功信息
-
-            add_to_upload_queue(ppt_name, new_ppt_path)  # 将文件名和备份路径添加到上传队列
-            upload_to_openlist()  # 启动上传线程       
-    except Exception as e:   #获取其他错误类型
-            if type(e).__name__=='com_error':   #捕获无打开的PowerPoint实例而产生的的异常
-                log_print('No ppt available now (PowerPoint application not detected)')   #打印异常信息
-            else:   #打印出其他错误并继续轮询
-                log_print('Exception: ' + type(e).__name__ + ', request continue')   #打印异常信息
+    _backup_open_files(
+        save_folder=ppt_save_folder,
+        app_progid='PowerPoint.Application',
+        use_get_object=False,
+        collection_attr='Presentations',
+        file_type_label='ppt'
+    )
 
 
 
 @timeout(seconds=600, config_key='backup_timeout')   #添加10分钟超时机制
 def save_open_word_files(word_save_folder):   #定义word保存函数，参数word_save_folder是备份文件的存储路径
-    global upload_queue  # 声明全局上传队列变量
-    try:
-        if not os.path.exists(word_save_folder):   #检查word备份目录是否存在
-            os.makedirs(word_save_folder)   #若不存在则创建备份目录（包括所有必要的父目录）
-            log_print('Target backup folder not found, created: ' + word_save_folder + ' successfully')   #打印成功创建word备份目录的信息
-        
-        word_app = win32.Dispatch('Word.Application')   #启动一个Word实例，若启用独立实例则无法获取当前已经打开的Word实例信息
-        documents = word_app.Documents   #获取当前Word实例中所有打开的文档集合
-
-        any_backup_performed = False   #标记本轮是否有任何备份操作（替代原havedoc）
-            
-        for doc in documents:   #遍历集合
-            doc_path = doc.FullName   #获取Word文件的完整路径
-            doc_name = os.path.basename(doc_path)   #提取文件名
-            new_doc_path = os.path.join(word_save_folder, doc_name)   #生成备份路径
-
-            if os.path.exists(new_doc_path):   #检查备份文件是否已存在
-                if SaveAs_method_activated[doc_name] == True:   #如果SaveAs方法已被激活，则不再使用复制方法
-                    log_print(doc_name + ' has already existed in ' + word_save_folder + ', skipped backup (SaveAs method activated)')   #打印跳过信息
-                    continue   #跳过此次备份
-                
-                # 计算原始文件和备份文件的MD5值
-                original_md5 = calculate_md5(doc_path)
-                backup_md5 = calculate_md5(new_doc_path)
-                
-                # 只有当两个MD5都成功计算且相同时才跳过
-                if original_md5 and backup_md5 and original_md5 == backup_md5:
-                    # 本次会话中首次出现该文件时，更新修改时间为当前时间
-                    if not Existed_in_this_session[doc_name]:
-                        Existed_in_this_session[doc_name] = True
-                        current_time = time.time()
-                        os.utime(new_doc_path, (os.path.getatime(new_doc_path), current_time))
-                        log_print(doc_name + ' first appeared in this session, updated modification time')
-                    
-                    # MD5值相同，检查Openlist是否需要上传
-                    log_print(doc_name + ' has already existed in ' + word_save_folder + ', checking OpenList')
-                    if config.get('upload_to_openlist_enable'):
-                        if not check_file_exists_on_openlist(doc_name):
-                            if add_to_upload_queue(doc_name, new_doc_path):
-                                log_print(doc_name + ' not found on OpenList, adding to upload queue')
-                            else:
-                                log_print(doc_name + ' already in upload queue, skipped')
-                        else:
-                            log_print(doc_name + ' already exists on OpenList, skipped upload')
-                    continue   #跳过此次备份
-                elif original_md5 is None:
-                    # 源文件找不到，跳过这次备份
-                    log_print(doc_name + ' source file not found, skipping this backup')
-                    continue
-                else:
-                    # MD5值不同，需要备份
-                    log_print(doc_name + ' has changed, backup will begin soon (MD5 mismatch)')
-            
-            Existed_in_this_session[doc_name] = True   #标记该文件在本次会话中出现过
-            log_print('Start to backup ' + doc_name + ' to ' + word_save_folder)   #打印备份开始信息
-            # 如果目标文件存在，先移除只读属性
-            remove_readonly(new_doc_path)
-            copy_start_time=datetime.datetime.now()   #记录复制操作开始时间
-            shutil.copy2(doc_path, new_doc_path)   #复制文档到备份文件夹，并尝试保留元数据（如修改时间等）
-            copy_end_time=datetime.datetime.now()   #记录复制操作结束时间
-            copy_used_time=copy_end_time-copy_start_time  #计算复制所用时间
-
-            current_time=time.time()   #获取当前时间
-            os.utime(new_doc_path, (os.path.getatime(new_doc_path), current_time))   #设置修改时间为备份发生的时间，方便文件系统根据修改时间排序
-
-            file_skip_count[doc_name] = 0   #重置该文件的跳过计数器
-            any_backup_performed = True   #标记本轮有备份操作
-            log_print('Successfully backuped ' + doc_name + ' to ' + word_save_folder + ' in ' + str(copy_used_time) +' s')   #打印备份成功信息
-
-            # MD5不同，直接添加到上传队列（上传时会删除旧文件并重传）
-            if config.get('upload_to_openlist_enable'):
-                if add_to_upload_queue(doc_name, new_doc_path):
-                    log_print(doc_name + ' not found on OpenList, adding to upload queue')
-                else:
-                    log_print(doc_name + ' already in upload queue, skipped')
-        upload_to_openlist()  # 启动上传线程
-
-        if not any_backup_performed and len(documents) == 0:   #检查变量值，如果没有可备份PPT，打印此条信息
-                log_print('No doc available now')
-
-    except FileNotFoundError:   #捕获由于U盘等移动存储介质被移除而导致的“文件未找到”异常，使用2.0版本中的SaveAs方法进行备份
-        if not os.path.exists(word_save_folder):   #检查word备份目录是否存在
-            os.makedirs(word_save_folder)   #若不存在则创建备份目录（包括所有必要的父目录）
-            log_print('Target backup folder not found, created: ' + word_save_folder + ' successfully')   #打印成功创建word备份目录的信息
-    
-        for idx in range(1, documents.Count + 1):   #遍历文档实例集合
-            doc = documents.Item(idx)   #获取当前文档实例
-            doc_path = doc.FullName   #获取Word文件的完整路径
-            doc_name = os.path.basename(doc_path)   #提取文件名
-            new_doc_path = os.path.join(word_save_folder, doc_name)   #生成备份路径
-            log_print('Start to backup ' + doc_name + ' to ' + word_save_folder + ' using SaveAs method')   #打印备份开始信息
-            # 如果目标文件存在，先移除只读属性
-            remove_readonly(new_doc_path)
-            save_start_time=datetime.datetime.now()   #记录保存操作开始时间
-            doc.SaveAs(new_doc_path)   #使用SaveAs方法保存当前文档实例到指定路径
-            save_end_time=datetime.datetime.now()   #记录保存操作结束时间
-            save_used_time=save_end_time-save_start_time  #计算保存所用时间
-            SaveAs_method_activated[doc_name] = True   #标记该文件已激活SaveAs方法，后续不再备份
-            log_print('Detected access control, activated SaveAs method, successfully backuped ' + doc_name + ' to ' + word_save_folder + ' in ' + str(save_used_time) + ' s')   #打印备份成功信息
-
-            add_to_upload_queue(doc_name, new_doc_path)  # 将文件名和备份路径添加到上传队列
-            upload_to_openlist()  # 启动上传线程
-    except Exception as e:   #获取其他错误类型
-            if type(e).__name__=='com_error':   #捕获无打开的PowerPoint实例而产生的的异常
-                log_print('No doc available now (Word application not detected)')   #打印带时间戳和运行次数的异常信息
-            else:   #打印出其他错误并继续轮询
-                log_print('Exception: ' + type(e).__name__ + ', request continue')   #打印带时间戳和运行次数的异常信息
+    _backup_open_files(
+        save_folder=word_save_folder,
+        app_progid='Word.Application',
+        use_get_object=False,
+        collection_attr='Documents',
+        file_type_label='doc'
+    )
 
 
 
 @timeout(seconds=600, config_key='backup_timeout')  #添加10分钟超时机制
 def save_open_WPS_files(ppt_save_folder):   #定义WPS保存函数，参数ppt_save_folder是备份文件的存储路径
-    global upload_queue  # 声明全局上传队列变量
-    try:
-        if not os.path.exists(ppt_save_folder):   #检查ppt备份目录是否存在
-            os.makedirs(ppt_save_folder)   #若不存在则创建备份目录（包括所有必要的父目录）
-            log_print('Target backup folder not found, created: ' + ppt_save_folder + ' successfully')   #打印成功创建ppt备份目录的信息
-        
-        WPS_app=win32.GetObject(Class='KWPP.Application')   #捕获当前打开的WPS演示实例
-        WPSpresentations = WPS_app.Presentations   #获取当前WPS实例中所有打开的演示文稿集合
-
-        any_backup_performed = False   #标记本轮是否有任何备份操作（替代原haveppt）
-        
-        for ppt in WPSpresentations:   #遍历集合
-            WPS_ppt_path = ppt.FullName   #获取PPT文件的完整路径
-            WPS_ppt_name = os.path.basename(WPS_ppt_path)   #提取文件名
-            WPS_new_ppt_path = os.path.join(ppt_save_folder, WPS_ppt_name)   #生成备份路径
-
-            if os.path.exists(WPS_new_ppt_path):   #检查备份文件是否已存在
-                if SaveAs_method_activated[WPS_ppt_name] == True:   #如果SaveAs方法已被激活，则不再使用复制方法
-                    log_print(WPS_ppt_name + ' has already existed in ' + ppt_save_folder + ', skipped backup (SaveAs method activated)')   #打印带时间戳和运行次数的跳过信息
-                    continue   #跳过此次备份
-                
-                # 计算原始文件和备份文件的MD5值
-                original_md5 = calculate_md5(WPS_ppt_path)
-                backup_md5 = calculate_md5(WPS_new_ppt_path)
-                
-                # 只有当两个MD5都成功计算且相同时才跳过
-                if original_md5 and backup_md5 and original_md5 == backup_md5:
-                    # 本次会话中首次出现该文件时，更新修改时间为当前时间
-                    if not Existed_in_this_session[WPS_ppt_name]:
-                        Existed_in_this_session[WPS_ppt_name] = True
-                        current_time = time.time()
-                        os.utime(WPS_new_ppt_path, (os.path.getatime(WPS_new_ppt_path), current_time))
-                        log_print(WPS_ppt_name + ' first appeared in this session, updated modification time')
-                    
-                    # MD5值相同，检查Openlist是否需要上传
-                    log_print(WPS_ppt_name + ' has already existed in ' + ppt_save_folder + ', checking OpenList')
-                    if config.get('upload_to_openlist_enable'):
-                        if not check_file_exists_on_openlist(WPS_ppt_name):
-                            if add_to_upload_queue(WPS_ppt_name, WPS_new_ppt_path):
-                                log_print(WPS_ppt_name + ' not found on OpenList, adding to upload queue')
-                            else:
-                                log_print(WPS_ppt_name + ' already in upload queue, skipped')
-                        else:
-                            log_print(WPS_ppt_name + ' already exists on OpenList, skipped upload')
-                    continue   #跳过此次备份
-                elif original_md5 is None:
-                    # 源文件找不到，跳过这次备份
-                    log_print(WPS_ppt_name + ' source file not found, skipping this backup')
-                    continue
-                else:
-                    # MD5值不同，需要备份
-                    log_print(WPS_ppt_name + ' has changed, backup will begin soon (MD5 mismatch)')
-            
-            Existed_in_this_session[WPS_ppt_name] = True   #标记该文件在本次会话中出现过
-            log_print('Start to backup ' + WPS_ppt_name + ' to ' + ppt_save_folder)   #打印备份开始信息
-            # 如果目标文件存在，先移除只读属性
-            remove_readonly(WPS_new_ppt_path)
-            copystarttime=datetime.datetime.now()   #记录复制操作开始时间
-            shutil.copy2(WPS_ppt_path, WPS_new_ppt_path)   #复制PPT到备份文件夹，并尝试保留元数据（如修改时间等）
-            copyendtime=datetime.datetime.now()   #记录复制操作结束时间
-            copyusedtime=copyendtime-copystarttime  #计算复制所用时间
-
-            current_time=time.time()   #获取当前时间
-            os.utime(WPS_new_ppt_path, (os.path.getatime(WPS_new_ppt_path), current_time))   #设置修改时间为备份发生的时间，方便文件系统根据修改时间排序
-
-            file_skip_count[WPS_ppt_name] = 0   #重置该文件的跳过计数器
-            any_backup_performed = True   #标记本轮有备份操作
-            log_print('Successfully backuped ' + WPS_ppt_name + ' to ' + ppt_save_folder + ' in ' + str(copyusedtime) +' s')   #打印带时间戳和运行次数的备份成功信息
-
-            # MD5不同，直接添加到上传队列（上传时会删除旧文件并重传）
-            if config.get('upload_to_openlist_enable'):
-                if add_to_upload_queue(WPS_ppt_name, WPS_new_ppt_path):
-                    log_print(WPS_ppt_name + ' not found on OpenList, adding to upload queue')
-                else:
-                    log_print(WPS_ppt_name + ' already in upload queue, skipped')
-        upload_to_openlist()  # 启动上传线程
-
-        if not any_backup_performed and len(WPSpresentations) == 0:   #检查变量值，如果没有可备份PPT，打印此条信息
-            log_print('No WPS ppt available now (Normal request)')   #打印带时间戳和运行次数的运行信息
-
-    except FileNotFoundError:   #捕获由于U盘等移动存储介质被移除而导致的“文件未找到”异常，使用2.0版本中的SaveAs方法进行备份
-        if not os.path.exists(ppt_save_folder):   #检查ppt备份目录是否存在
-            os.makedirs(ppt_save_folder)   #若不存在则创建备份目录（包括所有必要的父目录）
-            log_print('Target backup folder not found, created: ' + ppt_save_folder + ' successfully')   #打印成功创建ppt备份目录的信息
-        
-        for idx in range(1, WPSpresentations.Count + 1):   #遍历PPT实例集合
-            ppt = WPSpresentations.Item(idx)   #获取当前PPT实例
-            WPS_ppt_path = ppt.FullName   #获取PPT文件的完整路径
-            WPS_ppt_name = os.path.basename(WPS_ppt_path)   #提取文件名
-            WPS_new_ppt_path = os.path.join(ppt_save_folder, WPS_ppt_name)   #生成备份路径
-            log_print('Start to backup ' + WPS_ppt_name + ' to ' + ppt_save_folder + ' using SaveAs method')   #打印备份开始信息
-            # 如果目标文件存在，先移除只读属性
-            remove_readonly(WPS_new_ppt_path)
-            savestarttime=datetime.datetime.now()   #记录保存操作开始时间
-            ppt.SaveAs(WPS_new_ppt_path)   #使用SaveAs方法保存当前PPT实例到指定路径
-            saveendtime=datetime.datetime.now()   #记录保存操作结束时间
-            saveusedtime=saveendtime-savestarttime  #计算保存所用时间
-            SaveAs_method_activated[WPS_ppt_name] = True   #标记该文件已激活SaveAs方法，后续不再备份
-            log_print('Detected access control, activated SaveAs method, successfully backuped ' + WPS_ppt_name + ' to ' + ppt_save_folder + ' in ' + str(saveusedtime) + ' s')   #打印备份成功信息
-
-            add_to_upload_queue(WPS_ppt_name, WPS_new_ppt_path)  # 将文件名和备份路径添加到上传队列
-        upload_to_openlist()  # 启动上传线程  
-    except Exception as e:   #获取其他错误类型
-            if type(e).__name__=='com_error':   #捕获无打开的WPS实例而产生的的异常
-                log_print('No ppt available now (WPS application not detected)')   #打印异常信息
-            else:   #打印出其他错误并继续轮询
-                log_print('Exception: ' + type(e).__name__ + ', request continue')   #打印异常信息
+    _backup_open_files(
+        save_folder=ppt_save_folder,
+        app_progid='KWPP.Application',
+        use_get_object=True,
+        collection_attr='Presentations',
+        file_type_label='WPS ppt'
+    )
 
 
 
