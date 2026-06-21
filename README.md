@@ -398,7 +398,7 @@ $~$
 
 9. 全部使用Github Actions的Windows环境来进行Nuitka的.exe编译，使用MSVC14.0编译器以兼容Windows7
 
-### 2026-06-09（6.2发布）
+### 2026-06-09（6.1发布）
 
 1. OpenList 上传机制完善
 ·在校验文件MD5值发现文件未发生变化时，增加对文件是否存在于Openlist的检查，避免漏传
@@ -419,3 +419,33 @@ $~$
 ·简化了Github Actions的打包配置，将主程序和Config Editor的打包都合并在单个工作流中管理
 ·新增 `openlist-api-architecture.yaml` 文件，记录此程序使用到的 OpenList API 架构信息，可以用于相关平台的信息导入（例如Cloudflare API Shield，在导入时要将servers-url替换为自己的Openlist域名）
 ·`.gitignore` 忽略 `*.txt` 文件（为了在开发环境下排除 `OBUabnormal.txt`），`requirements.txt` 移除了不需要的 svglib 和 rlpycairo 依赖
+
+### 2026-06-21（6.2发布）
+
+1. OpenList 上传机制完善
+·在校验文件MD5值发现文件未发生变化时，增加对文件是否存在于Openlist的检查，如果远端不存在则添加到上传队列
+·新增队列重复检查：在添加上传队列前检查队列中是否已存在同名文件，避免重复入队
+·新增上传缓存机制：上传成功后记录到本地缓存，后续主循环检查时直接返回"已存在"，避免因服务器端文件索引延迟导致的重复上传
+·缓存有效期默认30分钟（可通过 `upload_cache_expire_seconds` 配置项调整）
+·修复多上传线程并发问题：使用线程锁和运行标志确保同一时间只有一个上传线程在运行
+
+2. 路径格式标准化
+·OpenList 目标文件夹路径统一处理末尾斜杠和开头斜杠，确保路径格式一致性
+·修正了根目录（`/`）下路径拼接逻辑，使用条件判断代替 `os.path.join` 避免重复斜杠
+
+3. 精确备份机制增强
+·`shutil.copytree` 增加 `dirs_exist_ok=True` 参数，允许覆盖已存在的目标文件夹
+·新增 `accurate_backup_running` 标志，防止精确备份子线程并发运行
+·精确备份成功后自动禁用该功能，避免同一目录重复备份，并更新配置文件持久化此设置
+·精确备份改为在独立守护线程中运行，不再占用主循环时间
+
+4. ConfigEditor 配置编辑器增强
+·新增精确备份目标路径的文件夹浏览选择器，支持自动补全路径
+·新增 `upload_cache_expire_seconds` 配置项编辑支持，归类到"超时与重试"分组
+·新增 `log_abnormal_upload` 配置项编辑支持
+·配置恢复逻辑优化，在恢复默认配置前备份当前配置
+
+5. 核心代码精简
+·大幅度简化 `Officebackup6.2.py` 和 `Officebackup6.2Core.py` 的主函数循环逻辑，提高代码可读性和可维护性
+
+6. 仓库内增加技术栈流程图，可在[https://app.diagrams.net](https://app.diagrams.net)中打开
