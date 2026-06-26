@@ -116,18 +116,30 @@ upload_thread_lock = threading.Lock()  # 上传线程锁，确保只有一个上
 upload_thread_running = False  # 上传线程运行标志
 openlist_remote_files = set()  # 远端OpenList目标文件夹中的文件列表（文件名集合）
 openlist_ready = False  # OpenList初始化完成标志
+openlist_init_started = False  # OpenList初始化线程启动标志（用于延迟初始化）
 accurate_backup_running = False  # 精确备份线程运行标志
 
 def is_file_in_upload_queue(file_name):   #检查文件是否已在上传队列中，避免重复入队
     with upload_thread_lock:
         return any(item[0] == file_name for item in upload_queue)
 
-def add_to_upload_queue(file_name, file_path):   #原子性地添加文件到上传队列（检查+添加在同一锁内）
+def add_to_upload_queue(file_name, file_path):   #原子性地添加文件到上传队列（检查+添加在同一锁内），并触发延迟初始化
+    global openlist_init_started
+    
     with upload_thread_lock:
         if any(item[0] == file_name for item in upload_queue):
             return False
         upload_queue.append((file_name, file_path))
-        return True
+        
+        # 延迟初始化：如果OpenList未初始化且初始化线程未启动，则启动初始化线程
+        if not openlist_ready and not openlist_init_started and config.get('upload_to_openlist_enable'):
+            openlist_init_started = True
+            init_thread = threading.Thread(target=init_openlist_async)
+            init_thread.daemon = True
+            init_thread.start()
+            log_print('OpenList initialization triggered', source='openlist')
+    
+    return True
 
 def is_file_on_openlist(file_name):   #检查文件是否存在于远端OpenList目标文件夹中（使用本地缓存）
     return file_name in openlist_remote_files
@@ -823,13 +835,6 @@ def global_exception_handler(exctype, value, tb):   #处理全局未捕获异常
 
 # 设置全局异常处理器
 sys.excepthook = global_exception_handler
-
-
-# 启动OpenList后台初始化线程
-if config.get('upload_to_openlist_enable'):
-    init_thread = threading.Thread(target=init_openlist_async)
-    init_thread.daemon = True
-    init_thread.start()
 
 
 print('Program initialization completed, entering main loop\n')

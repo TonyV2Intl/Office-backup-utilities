@@ -1,0 +1,52 @@
+Office Backup Utilities 6.2
+Copyright (C) 2024-2026 TonyV2Intl
+Session starts at: 2026-06-26 23:18:52
+
+Program initialization completed, entering main loop
+
+[23:18:55-#1-main] No ppt available now (Normal request)
+[23:18:55-#2-main] No doc available now (Normal request)
+[23:18:55-#3-main] No WPS ppt available now (KWPP application not detected)
+[23:19:05-#4-main] Start to backup test.pptx to C:\Users\Tony\Desktop\Coding\Office-backup-utilities\Officebackup\\pptbackup
+[23:19:05-#5-main] Successfully backuped test.pptx to C:\Users\Tony\Desktop\Coding\Office-backup-utilities\Officebackup\\pptbackup in 0:00:00.002871 s
+[23:19:05-#6-openlist] OpenList initialization started in background
+[23:19:05-#7-openlist] OpenList initialization triggered
+[23:19:05-#8-main] test.pptx not found on OpenList, adding to upload queue
+[23:19:05-#9-main] No doc available now (Normal request)
+[23:19:05-#10-main] No WPS ppt available now (KWPP application not detected)
+[23:19:06-#11-openlist] OpenList login successful
+[23:19:06-#12-openlist] OpenList target folder validated: /Openlist Example Remote Folder
+[23:19:10-#13-openlist] Fetched 150 files from remote folder
+[23:19:10-#14-openlist] OpenList initialization completed
+[23:19:10-#15-openlist] Upload thread starting
+[23:19:10-#16-openlist] Upload thread started, processing 1 file(s)
+[23:19:10-#17-openlist] Start to upload test.pptx to OpenList
+[23:19:11-#18-openlist] Login to OpenList successfully
+[23:19:11-#19-openlist] Target folder validated: /Openlist Example Remote Folder
+[23:19:12-#20-openlist] Existing file in OpenList deleted successfully: test.pptx
+[23:19:12-#21-openlist] Uploading: test.pptx, file size: 4080.96 KB
+[23:19:15-#22-main] test.pptx has already existed in C:\Users\Tony\Desktop\Coding\Office-backup-utilities\Officebackup\\pptbackup, checking OpenList
+[23:19:15-#23-main] test.pptx already in upload queue, skipped
+[23:19:15-#24-main] No doc available now (Normal request)
+[23:19:15-#25-main] No WPS ppt available now (KWPP application not detected)
+[23:19:20-#26-openlist] Upload to OpenList successfully: test.pptx
+[23:19:20-#27-openlist] Upload to OpenList finished: test.pptx in 0:00:09.813704 s
+[23:19:20-#28-openlist] All files uploaded successfully, upload thread exit
+[23:19:20-#29-openlist] Upload thread finished
+[23:19:25-#30-main] test.pptx has already existed in C:\Users\Tony\Desktop\Coding\Office-backup-utilities\Officebackup\\pptbackup, checking OpenList
+[23:19:25-#31-main] test.pptx already exists on OpenList, skipped upload
+[23:19:25-#32-main] No doc available now (Normal request)
+[23:19:25-#33-main] No WPS ppt available now (KWPP application not detected)
+[23:19:35-#34-main] test.pptx has already existed in C:\Users\Tony\Desktop\Coding\Office-backup-utilities\Officebackup\\pptbackup, checking OpenList
+[23:19:35-#35-main] test.pptx already exists on OpenList, skipped upload
+[23:19:35-#36-main] No doc available now (Normal request)
+[23:19:35-#37-main] No WPS ppt available now (KWPP application not detected)
+[23:19:48-#38-main] No ppt available now (Normal request)
+[23:19:48-#39-main] No doc available now (Normal request)
+[23:19:48-#40-main] No WPS ppt available now (KWPP application not detected)
+[23:19:51] [ERROR] Traceback (most recent call last):
+  File "c:\Users\Tony\Desktop\Coding\Office-backup-utilities\Officebackup6.2.py", line 856, in <module>
+    time.sleep(sleeptime)   #等待指定时间后继续轮询
+    ~~~~~~~~~~^^^^^^^^^^^
+KeyboardInterrupt
+

@@ -183,7 +183,9 @@ cython_debug/
 .trae
 *.exe
 *.json
+*.txt
+
 !OfficebackupSingleConfig-example.json
 !OBU6.2-example.json
 !OBU6.2Core-example.json
-*.txt
+!OBUlatest-example.log
