@@ -500,4 +500,4 @@ $~$
 5. 核心代码精简
 ·大幅度简化 `Officebackup6.2.py` 和 `Officebackup6.2Core.py` 的主函数循环逻辑，提高代码可读性和可维护性
 
-6. 仓库内增加技术栈流程图，可在[https://app.diagrams.net](https://app.diagrams.net)中打开
+6. Readme文件增加技术架构与核心工作流程图
