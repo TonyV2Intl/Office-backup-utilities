@@ -646,19 +646,38 @@ class ConfigEditor:
         
         try:
             config_changed = False
+            default_config = self.get_default_config()
             if os.path.exists(config_file):
                 with open(config_file, 'r', encoding='utf-8') as f:
-                    self.config_data = json.load(f)
+                    loaded_config = json.load(f)
+                
+                # 只保留当前版本默认配置中存在的键，过滤掉旧版本的键
+                self.config_data = {}
+                for key in default_config.keys():
+                    if key in loaded_config:
+                        self.config_data[key] = loaded_config[key]
+                    else:
+                        self.config_data[key] = default_config[key]
+                        config_changed = True
+                
                 # 检查是否有缺失的配置项
-                default_config = self.get_default_config()
                 for key, value in default_config.items():
                     if key not in self.config_data:
                         self.config_data[key] = value
                         config_changed = True
+                
+                # 检查是否有被过滤掉的旧版本键
+                removed_keys = [key for key in loaded_config.keys() if key not in default_config]
+                if removed_keys:
+                    config_changed = True
+                
                 if config_changed:
-                    # 保存补全后的配置
+                    # 保存补全后的配置（已过滤旧版本键）
                     self.save_config_to_file(self.config_data, config_file)
-                    self.status_var.set(f"配置文件已更新，新增了缺失的配置项: {config_file}")
+                    if removed_keys:
+                        self.status_var.set(f"配置文件已更新，过滤了 {len(removed_keys)} 个旧版本配置项")
+                    else:
+                        self.status_var.set(f"配置文件已更新，新增了缺失的配置项: {config_file}")
                 else:
                     self.status_var.set(f"成功加载配置文件: {config_file}")
             else:
@@ -761,37 +780,38 @@ class ConfigEditor:
         for widget in self.config_content.winfo_children():
             widget.destroy()
         
-        # 创建配置项分组
+        # 创建配置项分组，只包含当前版本默认配置中存在的键
+        default_config = self.get_default_config()
         sections = {
-            "备份路径": ["ppt_backup_path", "word_backup_path"],
-            "时间设置": ["interval", "max_skipping_time"],
-            "功能开关": ["ppt_backup_enable", "word_backup_enable", "wps_backup_enable"]
+            "备份路径": [k for k in ["ppt_backup_path", "word_backup_path"] if k in default_config],
+            "时间设置": [k for k in ["interval", "max_skipping_time"] if k in default_config],
+            "功能开关": [k for k in ["ppt_backup_enable", "word_backup_enable", "wps_backup_enable"] if k in default_config]
         }
         
-        # 添加云盘相关配置（如果适用）
+        # 添加云盘相关配置（如果适用），只包含当前版本默认配置中存在的键
         cloud_section = self.version_configs[self.current_version]["cloud_section"]
         cloud_params = self.version_configs[self.current_version]["cloud_params"]
         if cloud_section and cloud_params:
-            if self.current_version == "5.0":
+            if self.current_version == "5.0" and "upload_to_123pan_enable" in default_config:
                 sections["功能开关"].append("upload_to_123pan_enable")
-            elif self.current_version == "6.2":
+            elif self.current_version == "6.2" and "upload_to_openlist_enable" in default_config:
                 sections["功能开关"].append("upload_to_openlist_enable")
-            sections[cloud_section] = cloud_params
+            sections[cloud_section] = [k for k in cloud_params if k in default_config]
         
-        # 添加其他配置
-        sections["精确备份"] = ["accurate_backup_enable", "accurate_backup_source_path", "accurate_backup_target_path"]
+        # 添加其他配置，只包含当前版本默认配置中存在的键
+        sections["精确备份"] = [k for k in ["accurate_backup_enable", "accurate_backup_source_path", "accurate_backup_target_path"] if k in default_config]
         
-        # 添加控制台和日志设置
+        # 添加控制台和日志设置，只包含当前版本默认配置中存在的键
         if self.current_version == "6.2":
-            sections["界面与日志"] = ["hide_tray_icon", "show_console_window_at_startup", "save_log", "archive_previous_log", "log_abnormal_upload"]
+            sections["界面与日志"] = [k for k in ["hide_tray_icon", "show_console_window_at_startup", "save_log", "archive_previous_log", "log_abnormal_upload"] if k in default_config]
         else:
-            sections["控制台与日志"] = ["show_console_window_at_startup", "save_log", "archive_previous_log"]
+            sections["控制台与日志"] = [k for k in ["show_console_window_at_startup", "save_log", "archive_previous_log"] if k in default_config]
         
-        # 添加超时和重试设置
+        # 添加超时和重试设置，只包含当前版本默认配置中存在的键
         if self.current_version == "6.2":
-            sections["超时与重试"] = ["backup_timeout", "upload_retry_wait", "upload_max_retries"]
+            sections["超时与重试"] = [k for k in ["backup_timeout", "upload_retry_wait", "upload_max_retries"] if k in default_config]
         else:
-            sections["超时设置"] = ["backup_timeout"]
+            sections["超时设置"] = [k for k in ["backup_timeout"] if k in default_config]
         
         # 为每个分组创建框架
         for section_name, keys in sections.items():
@@ -876,6 +896,11 @@ class ConfigEditor:
         var.set(new_target)
     
     def on_config_change(self, key, value):
+        # 只处理当前版本默认配置中存在的键
+        default_config = self.get_default_config()
+        if key not in default_config:
+            return
+        
         # 处理路径格式，确保Windows路径在JSON中正确保存
         if "_path" in key and value:
             # 确保路径使用正确的Windows格式
@@ -899,9 +924,13 @@ class ConfigEditor:
     def save_config(self):
         config_file = self.version_configs[self.current_version]["config_file"]
         
-        # 保存配置
+        # 保存配置，只保存当前版本默认配置中存在的键
         try:
-            self.save_config_to_file(self.config_data, config_file)
+            default_config = self.get_default_config()
+            # 过滤掉旧版本的键
+            filtered_config = {k: v for k, v in self.config_data.items() if k in default_config}
+            self.save_config_to_file(filtered_config, config_file)
+            self.config_data = filtered_config
             self.original_config = copy.deepcopy(self.config_data)
             self.status_var.set(f"配置已保存到: {config_file}")
         except Exception as e:

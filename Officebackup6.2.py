@@ -39,9 +39,9 @@ default_config = {
     "openlist_password": "",   #OpenList密码
     "openlist_target_folder": "",   #目标文件夹路径（相对路径，根目录用"/"表示）
     #文件夹精确备份功能
-    "accurate_backup_enable": False,
-    "accurate_backup_source_path": "",
-    "accurate_backup_target_path": "",
+    "accurate_backup_enable": False,   #是否启用文件夹精确备份功能
+    "accurate_backup_source_path": "",   #精确备份源文件夹路径
+    "accurate_backup_target_path": "",   #精确备份目标文件夹路径
     #托盘图标、控制台行为与日志保存设置
     #"tray_left_click_behavior": "open_console",   #托盘图标左键点击行为，选项有"open_console"（打开控制台）和"exit_program"（退出程序）（无法生效）
     "hide_tray_icon": False,   #是否隐藏托盘图标，True为隐藏，False为显示（默认）
@@ -56,15 +56,15 @@ default_config = {
 }
 try:   #读取配置文件
     with open('OBU6.2.json', 'r', encoding='utf-8') as f:   #尝试读取配置文件（只读）
-        config = json.load(f)
-    config_changed = False
+        config = json.load(f)   #加载JSON配置内容
+    config_changed = False   #标记配置是否有变更
     for key, value in default_config.items():   #如果现有配置文件有缺漏，根据默认配置项自动补全
-        if key not in config:
-            config[key] = value
-            config_changed = True
+        if key not in config:   #检查配置项是否存在
+            config[key] = value   #添加缺失的配置项
+            config_changed = True   #标记配置已变更
     if config_changed:   #如果配置文件有新增项，写回配置文件
-        with open('OBU6.2.json', 'w', encoding='utf-8') as f:
-            json.dump(config, f, indent=4, ensure_ascii=False)
+        with open('OBU6.2.json', 'w', encoding='utf-8') as f:   #以写入模式打开配置文件
+            json.dump(config, f, indent=4, ensure_ascii=False)   #写回更新后的配置
 except (FileNotFoundError, json.JSONDecodeError):   #若配置文件不存在或无法解析
     config = default_config   #使用默认配置
     with open('OBU6.2.json', 'w', encoding='utf-8') as f:   #在当前目录下根据默认配置文件创建（写入）
@@ -76,16 +76,16 @@ if config.get('save_log'):   #检查是否启用日志保存功能
     if os.path.exists('OBUlatest.log'):   #如果日志文件存在
         if config.get('archive_previous_log'):   #如果启用归档功能
             # 将旧日志重命名为OBUprevious.log
-            if os.path.exists('OBUprevious.log'):
-                os.remove('OBUprevious.log')
-            os.rename('OBUlatest.log', 'OBUprevious.log')
+            if os.path.exists('OBUprevious.log'):   #检查旧归档日志是否存在
+                os.remove('OBUprevious.log')   #删除旧归档日志
+            os.rename('OBUlatest.log', 'OBUprevious.log')   #重命名当前日志为归档日志
         else:   #如果禁用归档功能，直接删除旧日志
-            os.remove('OBUlatest.log')
+            os.remove('OBUlatest.log')   #删除旧日志文件
     log_file = open('OBUlatest.log', 'a', encoding='utf-8')   #以追加模式打开日志文件
     # 写入版权信息和开始运行时间戳到控制台和日志文件
-    header = 'Office Backup Utilities 6.2\nCopyright (C) 2024-2026 TonyV2Intl\nSession starts at: ' + time.strftime('%Y-%m-%d %H:%M:%S')
-    print(header + '\n')
-    log_file.write(header + '\n\n')
+    header = 'Office Backup Utilities 6.2\nCopyright (C) 2024-2026 TonyV2Intl\nSession starts at: ' + time.strftime('%Y-%m-%d %H:%M:%S')   #构建日志头信息
+    print(header + '\n')   #打印到控制台
+    log_file.write(header + '\n\n')   #写入日志文件
     log_file.flush()   #刷新文件缓冲区，确保日志消息立即写入文件
 
 def log_print(msg, source='main'):   #定义日志打印函数
@@ -101,8 +101,8 @@ def log_print(msg, source='main'):   #定义日志打印函数
 
 console_visible = config.get('show_console_window_at_startup')   #获取控制台窗口初始状态参数（默认为隐藏）
 console_window = ctypes.windll.kernel32.GetConsoleWindow()   #获取控制台窗口句柄
-if not console_visible:
-    ctypes.windll.user32.ShowWindow(console_window, 0)   #隐藏控制台窗口
+if not console_visible:   #如果配置为隐藏控制台窗口
+    ctypes.windll.user32.ShowWindow(console_window, 0)   #隐藏控制台窗口（SW_HIDE）
 
 
 
@@ -120,26 +120,26 @@ openlist_init_started = False  # OpenList初始化线程启动标志（用于延
 accurate_backup_running = False  # 精确备份线程运行标志
 
 def is_file_in_upload_queue(file_name):   #检查文件是否已在上传队列中，避免重复入队
-    with upload_thread_lock:
-        return any(item[0] == file_name for item in upload_queue)
+    with upload_thread_lock:   #获取上传线程锁，保证线程安全
+        return any(item[0] == file_name for item in upload_queue)   #遍历队列检查文件名是否存在
 
 def add_to_upload_queue(file_name, file_path):   #原子性地添加文件到上传队列（检查+添加在同一锁内），并触发延迟初始化
-    global openlist_init_started
+    global openlist_init_started   #声明全局变量openlist_init_started
     
-    with upload_thread_lock:
-        if any(item[0] == file_name for item in upload_queue):
-            return False
-        upload_queue.append((file_name, file_path))
+    with upload_thread_lock:   #获取上传线程锁，保证原子操作
+        if any(item[0] == file_name for item in upload_queue):   #检查文件是否已在队列中
+            return False   #已存在则返回False，不重复添加
+        upload_queue.append((file_name, file_path))   #添加文件到上传队列
         
         # 延迟初始化：如果OpenList未初始化且初始化线程未启动，则启动初始化线程
-        if not openlist_ready and not openlist_init_started and config.get('upload_to_openlist_enable'):
-            openlist_init_started = True
-            init_thread = threading.Thread(target=init_openlist_async)
-            init_thread.daemon = True
-            init_thread.start()
-            log_print('OpenList initialization triggered', source='openlist')
+        if not openlist_ready and not openlist_init_started and config.get('upload_to_openlist_enable'):   #检查初始化条件
+            openlist_init_started = True   #标记初始化线程已启动
+            init_thread = threading.Thread(target=init_openlist_async)   #创建初始化线程
+            init_thread.daemon = True   #设置为守护线程
+            init_thread.start()   #启动初始化线程
+            log_print('OpenList initialization triggered', source='openlist')   #记录日志
     
-    return True
+    return True   #添加成功返回True
 
 def is_file_on_openlist(file_name):   #检查文件是否存在于远端OpenList目标文件夹中（使用本地缓存）
     return file_name in openlist_remote_files
@@ -153,57 +153,57 @@ word_save_folder=config.get('word_backup_path')   #word备份路径
 
 
 # OpenList相关变量默认值
-openlist_url = ''
-openlist_username = ''
-openlist_password = ''
-openlist_target_folder = '/'
+openlist_url = ''   #OpenList服务器URL
+openlist_username = ''   #OpenList用户名
+openlist_password = ''   #OpenList密码
+openlist_target_folder = '/'   #OpenList目标文件夹路径
 
 if config.get('upload_to_openlist_enable'):   #只有启用上传功能时才进行相关初始化
     try:   #尝试导入AList3SDK
         from alist import AListUser, AListAsync   #导入AList3SDK，用于与OpenList/AList服务交互（1.3.1版本默认是同步API，需要指定使用AListAsync类已进行异步操作）
-    except ImportError:
-        log_print("alist3 not found, upload function disabled for this session")
+    except ImportError:   #捕获导入异常
+        log_print("alist3 not found, upload function disabled for this session")   #记录导入失败
         config['upload_to_openlist_enable'] = False   #当前会话禁用上传功能（不修改配置文件）
 
     # 从配置文件读取OpenList变量
-    openlist_url = config.get('openlist_url')
-    if openlist_url:
-        openlist_url = openlist_url.rstrip('/')
-    openlist_username = config.get('openlist_username')
-    openlist_password = config.get('openlist_password')
-    openlist_target_folder = config.get('openlist_target_folder')
-    if openlist_target_folder:
-        openlist_target_folder = openlist_target_folder.rstrip('/')
-        if not openlist_target_folder.startswith('/'):
-            openlist_target_folder = '/' + openlist_target_folder
-    if not openlist_target_folder or openlist_target_folder == '':
-        openlist_target_folder = '/'
+    openlist_url = config.get('openlist_url')   #读取服务器URL
+    if openlist_url:   #如果URL不为空
+        openlist_url = openlist_url.rstrip('/')   #移除末尾斜杠
+    openlist_username = config.get('openlist_username')   #读取用户名
+    openlist_password = config.get('openlist_password')   #读取密码
+    openlist_target_folder = config.get('openlist_target_folder')   #读取目标文件夹路径
+    if openlist_target_folder:   #如果目标文件夹不为空
+        openlist_target_folder = openlist_target_folder.rstrip('/')   #移除末尾斜杠
+        if not openlist_target_folder.startswith('/'):   #检查是否以斜杠开头
+            openlist_target_folder = '/' + openlist_target_folder   #添加开头斜杠
+    if not openlist_target_folder or openlist_target_folder == '':   #如果目标文件夹为空
+        openlist_target_folder = '/'   #默认为根目录
 
 
 
 def upload_to_openlist_thread():   #在单独线程中执行上传操作
-    retry_count = 0
-    max_retries = config.get('upload_max_retries')
-    if max_retries is None or max_retries == "":
+    retry_count = 0   #初始化重试计数器
+    max_retries = config.get('upload_max_retries')   #获取最大重试次数配置
+    if max_retries is None or max_retries == "":   #如果未配置或为空
         max_retries = float('inf')  # 无限次重试
-    else:
+    else:   #否则转换为整数
         max_retries = int(max_retries)
 
-    upload_retry_wait = config.get('upload_retry_wait', 30)
-    if upload_retry_wait is None or upload_retry_wait == "":
-        upload_retry_wait = 30
+    upload_retry_wait = config.get('upload_retry_wait', 30)   #获取重试等待时间配置
+    if upload_retry_wait is None or upload_retry_wait == "":   #如果未配置或为空
+        upload_retry_wait = 30   #默认为30秒
 
-    while True:
+    while True:   #上传主循环
         # 当队列中有文件且上传功能启用时执行上传
-        if not upload_queue or not config.get('upload_to_openlist_enable'):
-            log_print('Upload queue is empty or upload disabled, upload thread exit', source='openlist')
-            break
+        if not upload_queue or not config.get('upload_to_openlist_enable'):   #检查队列是否为空或上传功能是否禁用
+            log_print('Upload queue is empty or upload disabled, upload thread exit', source='openlist')   #记录日志
+            break   #退出线程
 
-        log_print('Upload thread started, processing ' + str(len(upload_queue)) + ' file(s)', source='openlist')
+        log_print('Upload thread started, processing ' + str(len(upload_queue)) + ' file(s)', source='openlist')   #记录处理文件数量
 
         # 复制队列以避免在迭代时修改
-        current_queue = list(upload_queue)
-        failed_in_this_round = False
+        current_queue = list(upload_queue)   #复制当前队列快照
+        failed_in_this_round = False   #标记本轮是否有失败文件
 
         for (upload_file, upload_source_path) in current_queue:
             log_print('Start to upload ' + upload_file + ' to OpenList', source='openlist')   #打印上传开始信息
@@ -213,281 +213,281 @@ def upload_to_openlist_thread():   #在单独线程中执行上传操作
                 # 定义异步上传函数
                 async def async_upload():
                     # 初始化AList客户端和用户（使用异步API）
-                    user = AListUser(openlist_username, openlist_password)
-                    client = AListAsync(openlist_url)
-                    upload_result = False
+                    user = AListUser(openlist_username, openlist_password)   #创建AList用户对象
+                    client = AListAsync(openlist_url)   #创建异步AList客户端
+                    upload_result = False   #初始化上传结果标志
                     
                     # 构造目标文件路径
-                    if openlist_target_folder == '/':
-                        target_file_path = '/' + upload_file
-                    else:
+                    if openlist_target_folder == '/':   #如果目标文件夹是根目录
+                        target_file_path = '/' + upload_file   #直接拼接文件名
+                    else:   #否则拼接目标文件夹路径
                         target_file_path = openlist_target_folder + '/' + upload_file
                     
                     # 登录
-                    login_result = await client.login(user)
-                    if login_result:
-                        log_print('Login to OpenList successfully', source='openlist')
-                    else:
-                        error_str = 'Login failed'
-                        log_print('Login to OpenList failed', source='openlist')
-                        if config.get('log_abnormal_upload'):
-                            with open('OBUabnormal.txt', 'a', encoding='utf-8') as f:
-                                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {upload_file} - {error_str}\n")
-                        return False
+                    login_result = await client.login(user)   #异步执行登录
+                    if login_result:   #登录成功
+                        log_print('Login to OpenList successfully', source='openlist')   #记录日志
+                    else:   #登录失败
+                        error_str = 'Login failed'   #构建错误信息
+                        log_print('Login to OpenList failed', source='openlist')   #记录日志
+                        if config.get('log_abnormal_upload'):   #检查是否启用异常记录
+                            with open('OBUabnormal.txt', 'a', encoding='utf-8') as f:   #打开异常日志文件
+                                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {upload_file} - {error_str}\n")   #写入异常信息
+                        return False   #返回失败
                     
                     # 检查目标文件夹是否有效（使用mkdir测试）
                     try:
-                        await client.mkdir(openlist_target_folder)
-                        log_print('Target folder validated: ' + openlist_target_folder, source='openlist')
-                    except Exception as e:
+                        await client.mkdir(openlist_target_folder)   #尝试创建目标文件夹（已存在则不报错）
+                        log_print('Target folder validated: ' + openlist_target_folder, source='openlist')   #记录验证成功
+                    except Exception as e:   #创建失败，说明路径无效
                         # 说明路径无效，当前会话禁用上传功能
-                        error_str = 'Target folder invalid: ' + str(e)
-                        log_print('Target folder invalid: ' + openlist_target_folder + ', error: ' + str(e), source='openlist')
-                        log_print('Upload function disabled for this session, please check target folder path  is valid in the configuration file', source='openlist')
-                        if config.get('log_abnormal_upload'):
-                            with open('OBUabnormal.txt', 'a', encoding='utf-8') as f:
-                                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {upload_file} - {error_str}\n")
-                        config['upload_to_openlist_enable'] = False   #当前会话禁用（不修改配置文件）
-                        return False
+                        error_str = 'Target folder invalid: ' + str(e)   #构建错误信息
+                        log_print('Target folder invalid: ' + openlist_target_folder + ', error: ' + str(e), source='openlist')   #记录错误
+                        log_print('Upload function disabled for this session, please check target folder path  is valid in the configuration file', source='openlist')   #提示用户检查配置
+                        if config.get('log_abnormal_upload'):   #检查是否启用异常记录
+                            with open('OBUabnormal.txt', 'a', encoding='utf-8') as f:   #打开异常日志文件
+                                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {upload_file} - {error_str}\n")   #写入异常信息
+                        config['upload_to_openlist_enable'] = False   #当前会话禁用上传功能（不修改配置文件）
+                        return False   #返回失败
                     
                     # 检查文件是否已存在，存在则删除
                     try:
-                        await client.remove(target_file_path)
-                        log_print('Existing file in OpenList deleted successfully: ' + upload_file, source='openlist')
-                    except Exception as e:
-                        log_print('No matching file found in OpenList or delete failed: ' + str(e) + ', upload will continue', source='openlist')
+                        await client.remove(target_file_path)   #尝试删除远端已存在的同名文件
+                        log_print('Existing file in OpenList deleted successfully: ' + upload_file, source='openlist')   #记录删除成功
+                    except Exception as e:   #删除失败，可能文件不存在
+                        log_print('No matching file found in OpenList or delete failed: ' + str(e) + ', upload will continue', source='openlist')   #记录并继续
                     
                     # 上传文件
-                    file_size = os.path.getsize(upload_source_path)
-                    log_print('Uploading: ' + upload_file + ', file size: ' + str(round(file_size / 1024, 2)) + ' KB', source='openlist')
+                    file_size = os.path.getsize(upload_source_path)   #获取本地文件大小
+                    log_print('Uploading: ' + upload_file + ', file size: ' + str(round(file_size / 1024, 2)) + ' KB', source='openlist')   #记录上传信息
                     
                     # 使用 client.upload 方法，添加错误处理
                     try:
-                        upload_result = await client.upload(target_file_path, upload_source_path)
-                        if upload_result:
-                            log_print('Upload to OpenList successfully: ' + upload_file, source='openlist')
-                        else:
-                            error_str = 'Upload returned False'
-                            log_print('Upload to OpenList failed: ' + error_str, source='openlist')
-                            if config.get('log_abnormal_upload'):
-                                with open('OBUabnormal.txt', 'a', encoding='utf-8') as f:
-                                    f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {upload_file} - {error_str}\n")
-                    except Exception as e:
-                        error_str = str(e)
-                        log_print('Upload failed: ' + error_str, source='openlist')
-                        if 'currently being uploaded' in error_str:
-                            log_print('File is being uploaded by another session, removing conflict...', source='openlist')
+                        upload_result = await client.upload(target_file_path, upload_source_path)   #异步执行上传
+                        if upload_result:   #上传成功
+                            log_print('Upload to OpenList successfully: ' + upload_file, source='openlist')   #记录成功日志
+                        else:   #上传返回False
+                            error_str = 'Upload returned False'   #构建错误信息
+                            log_print('Upload to OpenList failed: ' + error_str, source='openlist')   #记录失败日志
+                            if config.get('log_abnormal_upload'):   #检查是否启用异常记录
+                                with open('OBUabnormal.txt', 'a', encoding='utf-8') as f:   #打开异常日志文件
+                                    f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {upload_file} - {error_str}\n")   #写入异常信息
+                    except Exception as e:   #捕获上传异常
+                        error_str = str(e)   #获取异常信息
+                        log_print('Upload failed: ' + error_str, source='openlist')   #记录失败日志
+                        if 'currently being uploaded' in error_str:   #检测并发上传冲突
+                            log_print('File is being uploaded by another session, removing conflict...', source='openlist')   #记录冲突信息
                             try:
-                                await client.remove(target_file_path)
-                                log_print('Removed conflicting upload session', source='openlist')
-                            except:
+                                await client.remove(target_file_path)   #尝试删除冲突文件
+                                log_print('Removed conflicting upload session', source='openlist')   #记录冲突解决
+                            except:   #删除失败则忽略
                                 pass
-                        if config.get('log_abnormal_upload'):
-                            with open('OBUabnormal.txt', 'a', encoding='utf-8') as f:
-                                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {upload_file} - {error_str}\n")
+                        if config.get('log_abnormal_upload'):   #检查是否启用异常记录
+                            with open('OBUabnormal.txt', 'a', encoding='utf-8') as f:   #打开异常日志文件
+                                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {upload_file} - {error_str}\n")   #写入异常信息
                     
-                    return upload_result
+                    return upload_result   #返回上传结果
                 
                 # 运行异步上传函数
-                upload_result = asyncio.run(async_upload())
+                upload_result = asyncio.run(async_upload())   #运行异步上传函数并获取结果
                 
                 # 检查上传是否成功
-                if upload_result:
+                if upload_result:   #上传成功
                     # 上传成功，从队列中移除文件
                     upload_end_time=datetime.datetime.now()   #记录上传操作结束时间
                     upload_used_time=upload_end_time-upload_start_time   #计算上传所用时间
-                    log_print('Upload to OpenList finished: ' + upload_file + ' in ' + str(upload_used_time) + ' s', source='openlist')
-                    with upload_thread_lock:
-                        if (upload_file, upload_source_path) in upload_queue:
-                            upload_queue.remove((upload_file, upload_source_path))
-                    openlist_remote_files.add(upload_file)
-                else:
+                    log_print('Upload to OpenList finished: ' + upload_file + ' in ' + str(upload_used_time) + ' s', source='openlist')   #记录上传完成信息
+                    with upload_thread_lock:   #获取上传线程锁
+                        if (upload_file, upload_source_path) in upload_queue:   #检查文件是否仍在队列中
+                            upload_queue.remove((upload_file, upload_source_path))   #从队列中移除文件
+                    openlist_remote_files.add(upload_file)   #添加到远端文件缓存
+                else:   #上传失败
                     # 上传失败，保留文件在队列中，等待下次上传
                     upload_end_time=datetime.datetime.now()   #记录上传操作结束时间
                     upload_used_time=upload_end_time-upload_start_time   #计算上传所用时间
-                    log_print('Upload to OpenList failed: ' + upload_file + ' in ' + str(upload_used_time) + ' s, will retry in next upload', source='openlist')
-                    failed_in_this_round = True
+                    log_print('Upload to OpenList failed: ' + upload_file + ' in ' + str(upload_used_time) + ' s, will retry in next upload', source='openlist')   #记录失败信息
+                    failed_in_this_round = True   #标记本轮有失败文件
                 
-            except Exception as e:
-                error_str = str(e)
-                log_print('Upload to OpenList failed: ' + error_str, source='openlist')
-                log_print('Traceback: ' + traceback.format_exc(), source='openlist')
+            except Exception as e:   #捕获上传过程中的异常
+                error_str = str(e)   #获取异常信息
+                log_print('Upload to OpenList failed: ' + error_str, source='openlist')   #记录失败日志
+                log_print('Traceback: ' + traceback.format_exc(), source='openlist')   #记录完整堆栈信息
                 # 记录异常文件到OBUabnormal.txt
-                if config.get('log_abnormal_upload'):
-                    with open('OBUabnormal.txt', 'a', encoding='utf-8') as f:
-                        f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {upload_file} - {error_str}\n")
+                if config.get('log_abnormal_upload'):   #检查是否启用异常记录
+                    with open('OBUabnormal.txt', 'a', encoding='utf-8') as f:   #打开异常日志文件
+                        f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {upload_file} - {error_str}\n")   #写入异常信息
                 # 发生错误时，保留文件在队列中，等待下次上传
                 upload_end_time=datetime.datetime.now()   #记录上传操作结束时间
                 upload_used_time=upload_end_time-upload_start_time   #计算上传所用时间
-                log_print('Upload to OpenList failed: ' + upload_file + ' in ' + str(upload_used_time) + ' s, will retry in next upload', source='openlist')
-                failed_in_this_round = True
+                log_print('Upload to OpenList failed: ' + upload_file + ' in ' + str(upload_used_time) + ' s, will retry in next upload', source='openlist')   #记录失败信息
+                failed_in_this_round = True   #标记本轮有失败文件
         
         # 处理完当前队列后，检查队列是否为空（所有文件都处理完了）
-        if not upload_queue:
-            log_print('All files uploaded successfully, upload thread exit', source='openlist')
-            break
+        if not upload_queue:   #检查上传队列是否为空
+            log_print('All files uploaded successfully, upload thread exit', source='openlist')   #记录全部上传成功
+            break   #退出线程
 
         # 检查队列是否还有文件（上传失败的）
-        if failed_in_this_round:
-            retry_count += 1
-            if max_retries != float('inf') and retry_count >= max_retries:
+        if failed_in_this_round:   #如果本轮有失败文件
+            retry_count += 1   #重试计数器加1
+            if max_retries != float('inf') and retry_count >= max_retries:   #检查是否达到最大重试次数
                 # 达到最大重试次数，放弃剩余文件
-                log_print('Max retries reached, ' + str(len(upload_queue)) + ' file(s) failed to upload', source='openlist')
-                break
-            if max_retries == float('inf'):
-                log_print('Some files failed to upload, waiting ' + str(upload_retry_wait) + ' seconds before retry (retry ' + str(retry_count) + ')', source='openlist')
-            else:
-                log_print('Some files failed to upload, waiting ' + str(upload_retry_wait) + ' seconds before retry (' + str(retry_count) + '/' + str(int(max_retries)) + ')', source='openlist')
-            time.sleep(upload_retry_wait)  # 等待后重试
-        else:
+                log_print('Max retries reached, ' + str(len(upload_queue)) + ' file(s) failed to upload', source='openlist')   #记录放弃信息
+                break   #退出线程
+            if max_retries == float('inf'):   #无限重试模式
+                log_print('Some files failed to upload, waiting ' + str(upload_retry_wait) + ' seconds before retry (retry ' + str(retry_count) + ')', source='openlist')   #记录重试等待信息
+            else:   #有限重试模式
+                log_print('Some files failed to upload, waiting ' + str(upload_retry_wait) + ' seconds before retry (' + str(retry_count) + '/' + str(int(max_retries)) + ')', source='openlist')   #记录重试进度
+            time.sleep(upload_retry_wait)   #等待指定时间后重试
+        else:   #队列非空但没有失败的文件（新添加的文件）
             # 队列非空但没有失败的文件（新添加的文件），继续处理
-            log_print('New files detected in queue, continuing upload', source='openlist')
+            log_print('New files detected in queue, continuing upload', source='openlist')   #记录检测到新文件
     
-    global upload_thread_running
-    upload_thread_running = False
-    log_print('Upload thread finished', source='openlist')
+    global upload_thread_running   #声明全局变量
+    upload_thread_running = False   #标记上传线程已结束
+    log_print('Upload thread finished', source='openlist')   #记录线程结束
 
 def check_file_exists_on_openlist(file_name):   #检查文件在Openlist上是否存在（使用本地缓存）
-    if not config.get('upload_to_openlist_enable'):
-        return False
+    if not config.get('upload_to_openlist_enable'):   #检查上传功能是否启用
+        return False   #未启用则返回False
     
-    if is_file_on_openlist(file_name):
-        return True
+    if is_file_on_openlist(file_name):   #检查文件是否在远端缓存中
+        return True   #存在则返回True
     
-    return False
+    return False   #不存在则返回False
 
 def test_openlist_connection():   #测试OpenList连接（登录+目标文件夹验证）
-    if not config.get('upload_to_openlist_enable'):
-        return True
+    if not config.get('upload_to_openlist_enable'):   #检查上传功能是否启用
+        return True   #未启用则直接返回成功
     
-    if not openlist_url or not openlist_username:
-        log_print('OpenList configuration incomplete, upload function disabled for this session', source='openlist')
-        config['upload_to_openlist_enable'] = False
-        return False
+    if not openlist_url or not openlist_username:   #检查配置是否完整
+        log_print('OpenList configuration incomplete, upload function disabled for this session', source='openlist')   #记录配置不完整
+        config['upload_to_openlist_enable'] = False   #禁用上传功能
+        return False   #返回失败
     
     try:
-        from alist import AListUser, AListAsync
-        import asyncio
+        from alist import AListUser, AListAsync   #导入AList3SDK
+        import asyncio   #导入asyncio模块
         
-        async def async_fetch_remote_files(client):
-            global openlist_remote_files
-            files_set = set()
-            page = 1
-            per_page = 100
+        async def async_fetch_remote_files(client):   #异步获取远端文件列表
+            global openlist_remote_files   #声明全局变量
+            files_set = set()   #初始化文件集合
+            page = 1   #初始化页码
+            per_page = 100   #每页获取100个文件
             
-            while True:
+            while True:   #循环获取所有分页
                 try:
-                    items = []
-                    async for item in client.list_dir(openlist_target_folder, page=page, per_page=per_page):
-                        items.append(item)
-                except Exception as e:
-                    log_print('Failed to fetch remote file list (page ' + str(page) + '): ' + str(e), source='openlist')
-                    break
+                    items = []   #初始化当前页项目列表
+                    async for item in client.list_dir(openlist_target_folder, page=page, per_page=per_page):   #异步遍历目录
+                        items.append(item)   #添加项目到列表
+                except Exception as e:   #获取失败
+                    log_print('Failed to fetch remote file list (page ' + str(page) + '): ' + str(e), source='openlist')   #记录错误
+                    break   #退出循环
                 
-                if not items:
-                    break
+                if not items:   #如果当前页为空
+                    break   #退出循环
                 
-                for item in items:
-                    if not item.is_dir:
-                        file_name = str(item.path).split('/')[-1]
-                        if '\\' in file_name:
-                            file_name = file_name.split('\\')[-1]
-                        files_set.add(file_name)
+                for item in items:   #遍历当前页项目
+                    if not item.is_dir:   #检查是否为文件
+                        file_name = str(item.path).split('/')[-1]   #提取文件名
+                        if '\\' in file_name:   #处理Windows路径分隔符
+                            file_name = file_name.split('\\')[-1]   #重新提取文件名
+                        files_set.add(file_name)   #添加到文件集合
                 
-                if len(items) < per_page:
-                    break
-                page += 1
+                if len(items) < per_page:   #检查是否为最后一页
+                    break   #退出循环
+                page += 1   #页码加1
             
-            openlist_remote_files = files_set
-            log_print('Fetched ' + str(len(files_set)) + ' files from remote folder', source='openlist')
-            return True
+            openlist_remote_files = files_set   #更新全局远端文件缓存
+            log_print('Fetched ' + str(len(files_set)) + ' files from remote folder', source='openlist')   #记录获取文件数量
+            return True   #返回成功
         
-        async def async_test():
-            user = AListUser(openlist_username, openlist_password)
-            client = AListAsync(openlist_url)
+        async def async_test():   #异步测试连接函数
+            user = AListUser(openlist_username, openlist_password)   #创建AList用户对象
+            client = AListAsync(openlist_url)   #创建异步AList客户端
             
-            login_result = await client.login(user)
-            if not login_result:
-                log_print('OpenList login failed, please check username and password', source='openlist')
-                return False
-            log_print('OpenList login successful', source='openlist')
+            login_result = await client.login(user)   #异步执行登录
+            if not login_result:   #登录失败
+                log_print('OpenList login failed, please check username and password', source='openlist')   #记录登录失败
+                return False   #返回失败
+            log_print('OpenList login successful', source='openlist')   #记录登录成功
             
             try:
-                await client.mkdir(openlist_target_folder)
-                log_print('OpenList target folder validated: ' + openlist_target_folder, source='openlist')
-            except Exception as e:
-                log_print('OpenList target folder invalid: ' + openlist_target_folder + ', error: ' + str(e), source='openlist')
-                return False
+                await client.mkdir(openlist_target_folder)   #尝试创建目标文件夹（验证路径有效性）
+                log_print('OpenList target folder validated: ' + openlist_target_folder, source='openlist')   #记录验证成功
+            except Exception as e:   #创建失败，路径无效
+                log_print('OpenList target folder invalid: ' + openlist_target_folder + ', error: ' + str(e), source='openlist')   #记录路径无效
+                return False   #返回失败
             
-            await async_fetch_remote_files(client)
-            return True
+            await async_fetch_remote_files(client)   #获取远端文件列表
+            return True   #返回成功
         
-        result = asyncio.run(async_test())
-        if not result:
-            config['upload_to_openlist_enable'] = False
-            log_print('Upload function disabled for this session due to connection test failure', source='openlist')
-        return result
-    except Exception as e:
-        log_print('OpenList connection test failed: ' + str(e), source='openlist')
-        config['upload_to_openlist_enable'] = False
-        return False
+        result = asyncio.run(async_test())   #运行异步测试函数
+        if not result:   #测试失败
+            config['upload_to_openlist_enable'] = False   #禁用上传功能
+            log_print('Upload function disabled for this session due to connection test failure', source='openlist')   #记录禁用信息
+        return result   #返回测试结果
+    except Exception as e:   #捕获其他异常
+        log_print('OpenList connection test failed: ' + str(e), source='openlist')   #记录连接测试失败
+        config['upload_to_openlist_enable'] = False   #禁用上传功能
+        return False   #返回失败
 
 def upload_to_openlist():   #启动上传线程
-    global upload_thread_running
+    global upload_thread_running   #声明全局变量
     
     if not config.get('upload_to_openlist_enable'):   #检查上传功能是否启用
         return   #如果未启用，直接返回
     
     if not openlist_ready:   # OpenList初始化未完成，不启动上传线程
-        return
+        return   #未初始化则返回
     
     # 使用锁确保只有一个上传线程在运行
-    with upload_thread_lock:
-        if upload_queue and not upload_thread_running:
+    with upload_thread_lock:   #获取上传线程锁
+        if upload_queue and not upload_thread_running:   #检查队列非空且无上传线程运行
             # 创建并启动上传线程
-            upload_thread = threading.Thread(target=upload_to_openlist_thread)
-            log_print('Upload thread starting', source='openlist')
+            upload_thread = threading.Thread(target=upload_to_openlist_thread)   #创建上传线程
+            log_print('Upload thread starting', source='openlist')   #记录线程启动
             upload_thread.daemon = True  # 设置为守护线程，随主程序终止而结束
-            upload_thread_running = True
-            upload_thread.start()
+            upload_thread_running = True   #标记上传线程正在运行
+            upload_thread.start()   #启动上传线程
 
 def init_openlist_async():   #后台初始化OpenList连接和文件列表
-    global openlist_ready
+    global openlist_ready   #声明全局变量
     
-    if not config.get('upload_to_openlist_enable'):
-        openlist_ready = True
-        return
+    if not config.get('upload_to_openlist_enable'):   #检查上传功能是否启用
+        openlist_ready = True   #标记初始化完成
+        return   #未启用则直接返回
     
-    log_print('OpenList initialization started in background', source='openlist')
-    result = test_openlist_connection()
+    log_print('OpenList initialization started in background', source='openlist')   #记录初始化开始
+    result = test_openlist_connection()   #测试连接
     
-    if result:
-        log_print('OpenList initialization completed', source='openlist')
+    if result:   #连接测试成功
+        log_print('OpenList initialization completed', source='openlist')   #记录初始化完成
         # 清理上传队列中已存在于远端的文件，避免重复上传
-        removed_count = 0
-        with upload_thread_lock:
-            new_queue = []
-            for file_name, file_path in upload_queue:
-                if file_name in openlist_remote_files:
-                    removed_count += 1
-                    log_print('Skipped upload (already exists on remote): ' + file_name, source='openlist')
-                else:
-                    new_queue.append((file_name, file_path))
-            upload_queue[:] = new_queue
-        if removed_count > 0:
-            log_print('Removed ' + str(removed_count) + ' existing files from upload queue', source='openlist')
-    else:
-        log_print('OpenList initialization failed, upload function disabled', source='openlist')
+        removed_count = 0   #初始化移除计数器
+        with upload_thread_lock:   #获取上传线程锁
+            new_queue = []   #初始化新队列
+            for file_name, file_path in upload_queue:   #遍历上传队列
+                if file_name in openlist_remote_files:   #检查文件是否已在远端
+                    removed_count += 1   #移除计数加1
+                    log_print('Skipped upload (already exists on remote): ' + file_name, source='openlist')   #记录跳过信息
+                else:   #文件不在远端
+                    new_queue.append((file_name, file_path))   #添加到新队列
+            upload_queue[:] = new_queue   #替换原队列
+        if removed_count > 0:   #如果有文件被移除
+            log_print('Removed ' + str(removed_count) + ' existing files from upload queue', source='openlist')   #记录移除数量
+    else:   #连接测试失败
+        log_print('OpenList initialization failed, upload function disabled', source='openlist')   #记录初始化失败
     
-    openlist_ready = True
+    openlist_ready = True   #标记初始化完成
     
-    if upload_queue and config.get('upload_to_openlist_enable'):
-        upload_to_openlist()
+    if upload_queue and config.get('upload_to_openlist_enable'):   #检查队列非空且上传功能启用
+        upload_to_openlist()   #启动上传线程
 
 
 if config.get('upload_to_openlist_enable'):   #检查上传功能是否启用
     if not openlist_url or not openlist_username or not openlist_target_folder:   #检查OpenList配置是否完整（密码可为空）
-        log_print('OpenList URL, username or target folder is empty, force disabled upload function, please provide valid credentials in the configuration file')
+        log_print('OpenList URL, username or target folder is empty, force disabled upload function, please provide valid credentials in the configuration file')   #记录配置不完整
         config['upload_to_openlist_enable'] = False   #强制禁用上传功能
 
 if config.get('accurate_backup_enable'):  # 检查精确备份功能是否启用
@@ -500,98 +500,98 @@ if config.get('accurate_backup_enable'):  # 检查精确备份功能是否启用
 
 
 # 超时装饰器函数 - 主线程执行函数，子线程计时
-def timeout(seconds, config_key=None):
-    def decorator(func):
-        def wrapper(*args, **kwargs):
-            timeout_value = seconds
-            if config_key:
-                timeout_value = config.get(config_key, seconds)
-                if timeout_value is None or timeout_value == "":
-                    timeout_value = seconds
+def timeout(seconds, config_key=None):   #定义超时装饰器，seconds为默认超时时间，config_key为配置键名
+    def decorator(func):   #装饰器函数
+        def wrapper(*args, **kwargs):   #包装函数
+            timeout_value = seconds   #初始化超时时间为默认值
+            if config_key:   #如果指定了配置键
+                timeout_value = config.get(config_key, seconds)   #从配置获取超时时间
+                if timeout_value is None or timeout_value == "":   #如果配置值为空
+                    timeout_value = seconds   #使用默认值
             
             # 超时标志
-            timeout_occurred = [False]
+            timeout_occurred = [False]   #使用列表实现可变对象引用
             
             # 计时线程函数
-            def timer_thread():
-                time.sleep(timeout_value)
-                if not timeout_occurred[0]:
-                    timeout_occurred[0] = True
+            def timer_thread():   #计时线程函数
+                time.sleep(timeout_value)   #等待超时时间
+                if not timeout_occurred[0]:   #如果函数还未执行完成
+                    timeout_occurred[0] = True   #标记超时发生
                     # 先打印超时信息（此时日志文件还未关闭）
-                    log_print(f"Function {func.__name__} exceeded timeout of {timeout_value} seconds, restarting program")
+                    log_print(f"Function {func.__name__} exceeded timeout of {timeout_value} seconds, restarting program")   #记录超时信息
                     # 关闭日志文件，解除占用
-                    if 'log_file' in globals():
+                    if 'log_file' in globals():   #检查日志文件是否存在
                         try:
-                            log_file.close()
+                            log_file.close()   #关闭日志文件
                             # 注意：关闭后不要再调用 log_print
-                        except:
+                        except:   #关闭失败则忽略
                             pass
                     # 启动新实例
                     try:
                         # 获取当前运行的可执行文件路径
                         # sys.argv[0] 在打包为exe后指向实际的exe文件
-                        current_exe = sys.argv[0]
-                        if not os.path.isabs(current_exe):
-                            current_exe = os.path.abspath(current_exe)
+                        current_exe = sys.argv[0]   #获取当前执行文件路径
+                        if not os.path.isabs(current_exe):   #检查是否为绝对路径
+                            current_exe = os.path.abspath(current_exe)   #转换为绝对路径
                         
                         # 启动新实例
-                        subprocess.Popen([current_exe])
+                        subprocess.Popen([current_exe])   #启动新进程
                         time.sleep(1)  # 给新进程启动时间
-                    except Exception as e:
+                    except Exception as e:   #启动失败
                         # 如果sys.argv[0]失败，尝试其他方法
                         try:
                             # 尝试使用__file__（适用于未打包的情况）
-                            script_path = os.path.abspath(__file__)
-                            subprocess.Popen([sys.executable, script_path])
-                            time.sleep(1)
-                        except:
+                            script_path = os.path.abspath(__file__)   #获取脚本路径
+                            subprocess.Popen([sys.executable, script_path])   #使用Python解释器启动
+                            time.sleep(1)   #给新进程启动时间
+                        except:   #再次失败则忽略
                             pass
                     # 强制退出
-                    os._exit(1)
+                    os._exit(1)   #强制退出当前进程
             
             # 启动计时线程
-            timer = threading.Thread(target=timer_thread)
+            timer = threading.Thread(target=timer_thread)   #创建计时线程
             timer.daemon = True  # 守护线程，主线程退出时自动退出
-            timer.start()
+            timer.start()   #启动计时线程
             
             try:
                 # 执行实际函数
-                result = func(*args, **kwargs)
+                result = func(*args, **kwargs)   #执行被装饰的函数
                 # 标记执行完成
-                timeout_occurred[0] = True
-                return result
-            except Exception as e:
-                log_print(f"Error in {func.__name__}: {str(e)}")
-                timeout_occurred[0] = True
-                return None
-        return wrapper
-    return decorator
+                timeout_occurred[0] = True   #标记函数执行完成
+                return result   #返回函数执行结果
+            except Exception as e:   #捕获函数执行异常
+                log_print(f"Error in {func.__name__}: {str(e)}")   #记录异常信息
+                timeout_occurred[0] = True   #标记执行完成（异常）
+                return None   #返回None
+        return wrapper   #返回包装函数
+    return decorator   #返回装饰器
 
 # 计算文件MD5值的函数
 def calculate_md5(file_path):  # 计算文件的MD5值
-    hash_md5 = hashlib.md5()
+    hash_md5 = hashlib.md5()   #创建MD5哈希对象
     try:
         # 使用更大的块大小以提高性能
-        with open(file_path, "rb") as f:
-            for chunk in iter(lambda: f.read(8192), b""):  # 使用8192字节的块大小
-                hash_md5.update(chunk)
-        return hash_md5.hexdigest()
-    except Exception as e:
-        log_print('Error calculating MD5 for ' + file_path + ': ' + str(e))
-        return None
+        with open(file_path, "rb") as f:   #以二进制只读模式打开文件
+            for chunk in iter(lambda: f.read(8192), b""):  # 使用8192字节的块大小读取文件
+                hash_md5.update(chunk)   #更新MD5哈希值
+        return hash_md5.hexdigest()   #返回十六进制MD5值
+    except Exception as e:   #捕获异常
+        log_print('Error calculating MD5 for ' + file_path + ': ' + str(e))   #记录错误信息
+        return None   #返回None
 
 # 辅助函数：检查并移除文件只读属性
-def remove_readonly(file_path):
+def remove_readonly(file_path):   #移除文件只读属性
     try:
-        if os.path.exists(file_path):
+        if os.path.exists(file_path):   #检查文件是否存在
             # 检查文件是否只读
-            attrs = os.stat(file_path).st_mode
+            attrs = os.stat(file_path).st_mode   #获取文件权限属性
             # 移除只读属性
-            if not (attrs & 0o200):  # 如果是只读的
+            if not (attrs & 0o200):  # 如果是只读的（无写入权限）
                 os.chmod(file_path, attrs | 0o200)  # 添加写入权限
-                log_print(f"Removed readonly attribute from {file_path}")
-    except Exception as e:
-        log_print(f"Error removing readonly from {file_path}: {e}")
+                log_print(f"Removed readonly attribute from {file_path}")   #记录移除只读属性
+    except Exception as e:   #捕获异常
+        log_print(f"Error removing readonly from {file_path}: {e}")   #记录错误信息
 
 def _backup_open_files(save_folder, app_progid, use_get_object, collection_attr, file_type_label):   #通用备份函数，参数化不同Office应用的差异
     global upload_queue   #声明全局上传队列变量
@@ -702,11 +702,11 @@ def _backup_open_files(save_folder, app_progid, use_get_object, collection_attr,
 @timeout(seconds=600, config_key='backup_timeout')  #添加10分钟超时机制
 def save_open_ppt_files(ppt_save_folder):   #定义ppt保存函数，参数ppt_save_folder是备份文件的存储路径
     _backup_open_files(
-        save_folder=ppt_save_folder,
-        app_progid='PowerPoint.Application',
-        use_get_object=False,
-        collection_attr='Presentations',
-        file_type_label='ppt'
+        save_folder=ppt_save_folder,   #备份保存路径
+        app_progid='PowerPoint.Application',   #PowerPoint应用程序ID
+        use_get_object=False,   #使用Dispatch方式获取COM对象
+        collection_attr='Presentations',   #演示文稿集合属性名
+        file_type_label='ppt'   #文件类型标签
     )
 
 
@@ -714,11 +714,11 @@ def save_open_ppt_files(ppt_save_folder):   #定义ppt保存函数，参数ppt_s
 @timeout(seconds=600, config_key='backup_timeout')   #添加10分钟超时机制
 def save_open_word_files(word_save_folder):   #定义word保存函数，参数word_save_folder是备份文件的存储路径
     _backup_open_files(
-        save_folder=word_save_folder,
-        app_progid='Word.Application',
-        use_get_object=False,
-        collection_attr='Documents',
-        file_type_label='doc'
+        save_folder=word_save_folder,   #备份保存路径
+        app_progid='Word.Application',   #Word应用程序ID
+        use_get_object=False,   #使用Dispatch方式获取COM对象
+        collection_attr='Documents',   #文档集合属性名
+        file_type_label='doc'   #文件类型标签
     )
 
 
@@ -726,24 +726,24 @@ def save_open_word_files(word_save_folder):   #定义word保存函数，参数wo
 @timeout(seconds=600, config_key='backup_timeout')  #添加10分钟超时机制
 def save_open_WPS_files(ppt_save_folder):   #定义WPS保存函数，参数ppt_save_folder是备份文件的存储路径
     _backup_open_files(
-        save_folder=ppt_save_folder,
-        app_progid='KWPP.Application',
-        use_get_object=True,
-        collection_attr='Presentations',
-        file_type_label='WPS ppt'
+        save_folder=ppt_save_folder,   #备份保存路径
+        app_progid='KWPP.Application',   #WPS演示应用程序ID
+        use_get_object=True,   #使用GetObject方式获取COM对象
+        collection_attr='Presentations',   #演示文稿集合属性名
+        file_type_label='WPS ppt'   #文件类型标签
     )
 
 
 
 def accurate_backup():   #定义精确备份函数
-    global accurate_backup_running
-    accurate_backup_running = True
+    global accurate_backup_running   #声明全局变量
+    accurate_backup_running = True   #标记精确备份正在运行
     try:
-        source_path = config.get('accurate_backup_source_path')
-        target_path = config.get('accurate_backup_target_path')
-        if not source_path or not target_path:
-            log_print('Accurate backup source or target path is empty, skipped')
-            return
+        source_path = config.get('accurate_backup_source_path')   #获取源文件夹路径
+        target_path = config.get('accurate_backup_target_path')   #获取目标文件夹路径
+        if not source_path or not target_path:   #检查路径是否为空
+            log_print('Accurate backup source or target path is empty, skipped')   #记录路径为空
+            return   #返回
         if os.path.exists(source_path):   #检查源文件夹是否存在
             log_print('Start accurate backup from ' + source_path + ' to ' + target_path)   #打印精确备份开始信息
             copy_start_time=datetime.datetime.now()   #记录复制操作开始时间
@@ -754,17 +754,17 @@ def accurate_backup():   #定义精确备份函数
             
             config['accurate_backup_enable'] = False   #当前会话禁用精确备份功能
             try:
-                with open('OBU6.2.json', 'w', encoding='utf-8') as f:
-                    json.dump(config, f, indent=4, ensure_ascii=False)
-                log_print('Accurate backup disabled after successful backup')
-            except Exception as e:
-                log_print('Failed to update config file: ' + str(e))
-        else:
+                with open('OBU6.2.json', 'w', encoding='utf-8') as f:   #打开配置文件
+                    json.dump(config, f, indent=4, ensure_ascii=False)   #写回配置
+                log_print('Accurate backup disabled after successful backup')   #记录禁用信息
+            except Exception as e:   #写入失败
+                log_print('Failed to update config file: ' + str(e))   #记录错误
+        else:   #源文件夹不存在
             log_print('Source path for accurate backup does not exist: ' + source_path + ', wait for the next request')  # 打印源文件夹不存在信息，等待下次请求
-    except Exception as e:
+    except Exception as e:   #捕获异常
         log_print('Accurate backup failed: ' + str(e))  # 打印精确备份失败信息
-    finally:
-        accurate_backup_running = False
+    finally:   #无论成功或失败都执行
+        accurate_backup_running = False   #标记精确备份已结束
     
 
 
@@ -772,15 +772,15 @@ def toggle_console():   #切换控制台窗口的显示/隐藏状态
     global console_visible   #声明全局变量console_visible，以便在函数内修改其值
     console_window = ctypes.windll.kernel32.GetConsoleWindow()   #获取控制台窗口句柄
     if console_visible:   #隐藏控制台窗口
-        ctypes.windll.user32.ShowWindow(console_window, 0)   #隐藏控制台窗口
-        console_visible = False
+        ctypes.windll.user32.ShowWindow(console_window, 0)   #隐藏控制台窗口（SW_HIDE）
+        console_visible = False   #标记控制台已隐藏
     else:   #显示控制台窗口
-        ctypes.windll.user32.ShowWindow(console_window, 1)  # SW_SHOWNORMAL
-        console_visible = True
+        ctypes.windll.user32.ShowWindow(console_window, 1)  # SW_SHOWNORMAL，显示控制台窗口
+        console_visible = True   #标记控制台已显示
 
 def exit_program(icon):   #退出程序
-    icon.stop()
-    os._exit(0)
+    icon.stop()   #停止托盘图标
+    os._exit(0)   #强制退出程序
 '''
 def on_clicked(icon):   #左键单击事件处理（无法生效）
     global behavior   #声明全局变量behavior，以便在函数内修改其值
@@ -797,15 +797,15 @@ AAABAAEAgIAAAAEAIAAoCAEAFgAAACgAAACAAAAAAAEAAAEAIAAAAAAAAAABAMMOAADDDgAAAAAAAAAA
 
 try:   ##尝试使用base64编码的图标
         import base64
-        import io
+        import io   #导入io模块
         # 解码base64数据
-        icon_data = base64.b64decode(ICON_BASE64.strip())
+        icon_data = base64.b64decode(ICON_BASE64.strip())   #解码Base64图标数据
         # 使用io.BytesIO创建一个内存文件对象
-        icon_file = io.BytesIO(icon_data)
+        icon_file = io.BytesIO(icon_data)   #创建内存文件对象
         # 使用PIL打开图标
-        image = Image.open(icon_file)
-except Exception as e:
-    log_print(f'Error loading icon: {str(e)}, using default icon')
+        image = Image.open(icon_file)   #使用PIL打开图标
+except Exception as e:   #捕获加载图标异常
+    log_print(f'Error loading icon: {str(e)}, using default icon')   #记录图标加载失败
     image = Image.new('RGB', (64, 64), color=(255, 255, 255))   #创建一个简单的白色方块作为默认图标
 
 menu = (item('Show/Hide console window', toggle_console), item('Exit program', exit_program))   #创建右键菜单
@@ -814,7 +814,7 @@ icon = pystray.Icon("office_backup_utilities", image, "Office Backup Utilities",
 '''icon.on_left_click = on_clicked   #绑定左键单击事件处理函数（无法生效）'''
 
 # 根据配置决定是否启动托盘图标
-if not config.get('hide_tray_icon'):
+if not config.get('hide_tray_icon'):   #检查是否隐藏托盘图标
     icon_task = threading.Thread(target=icon.run)   #创建托盘图标线程
     icon_task.daemon = True   #设置为守护线程（随主程序终止而自动结束）
     icon_task.start()   #启动托盘图标线程
@@ -822,35 +822,35 @@ if not config.get('hide_tray_icon'):
 # 全局异常处理函数
 def global_exception_handler(exctype, value, tb):   #处理全局未捕获异常
     # 构建完整的错误信息，包括 Traceback (most recent call last):
-    error_msg = "".join(traceback.format_exception(exctype, value, tb))
+    error_msg = "".join(traceback.format_exception(exctype, value, tb))   #格式化异常信息
     
     # 打印到控制台
-    print(f"[ERROR] {error_msg}")
+    print(f"[ERROR] {error_msg}")   #输出到控制台
     
     # 写入日志文件
-    if config.get('save_log'):
-        log_msg = time.strftime('[%H:%M:%S]') + ' [ERROR] ' + error_msg
-        log_file.write(log_msg + '\n')
-        log_file.flush()
+    if config.get('save_log'):   #检查是否保存日志
+        log_msg = time.strftime('[%H:%M:%S]') + ' [ERROR] ' + error_msg   #构建日志消息
+        log_file.write(log_msg + '\n')   #写入日志文件
+        log_file.flush()   #刷新文件缓冲区
 
 # 设置全局异常处理器
-sys.excepthook = global_exception_handler
+sys.excepthook = global_exception_handler   #注册全局异常处理器
 
 
-print('Program initialization completed, entering main loop\n')
-if config.get('save_log'):
-    log_file.write('Program initialization completed, entering main loop\n\n')
+print('Program initialization completed, entering main loop\n')   #打印初始化完成信息
+if config.get('save_log'):   #检查是否保存日志
+    log_file.write('Program initialization completed, entering main loop\n\n')   #写入日志文件
     log_file.flush()   #刷新文件缓冲区，确保日志消息立即写入文件
 
 while True:   #主线程无限循环，防止程序退出
     if config.get('ppt_backup_enable'):   #检查PPT备份功能是否启用
-        save_open_ppt_files(ppt_save_folder)   #启动线程
+        save_open_ppt_files(ppt_save_folder)   #执行PPT备份
     if config.get('word_backup_enable'):   #检查Word备份功能是否启用
-        save_open_word_files(word_save_folder)   #启动线程
+        save_open_word_files(word_save_folder)   #执行Word备份
     if config.get('wps_backup_enable'):   #检查WPS备份功能是否启用
-        save_open_WPS_files(ppt_save_folder)   #启动线程
+        save_open_WPS_files(ppt_save_folder)   #执行WPS备份
     if config.get('accurate_backup_enable') and not accurate_backup_running:  # 检查精确备份功能是否启用且未在运行
-        backup_thread = threading.Thread(target=accurate_backup)
-        backup_thread.daemon = True
-        backup_thread.start()
+        backup_thread = threading.Thread(target=accurate_backup)   #创建精确备份线程
+        backup_thread.daemon = True   #设置为守护线程
+        backup_thread.start()   #启动精确备份线程
     time.sleep(sleeptime)   #等待指定时间后继续轮询
