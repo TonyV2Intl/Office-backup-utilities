@@ -1,0 +1,258 @@
+openapi: 3.0.3
+info:
+  title: OpenList Chunk API (OpenList_Chunk fork — zmabin/OpenList_Chunk)
+  description: |
+    此 OpenAPI 规范仅描述 OpenList_Chunk 增强分支（https://github.com/zmabin/OpenList_Chunk）相对于官方 OpenList 额外增加的分块上传相关 API。
+
+    OpenList_Chunk 通过分块上传绕过 CDN 反向代理对单次请求体大小的限制（如 Cloudflare Free 计划限制最大上传文件大小为 100MB），对应程序端的 `openlist_upload_mode: chunked` 配置项（非默认，需用户手动设置）。
+
+    本程序使用的是 Stream Chunking（`Content-Range` 头）路径；Form Chunked 端点列出仅供参考。
+
+    注意：OpenList_Chunk 同时兼容官方 OpenList 的全部标准 API（登录、目录列出、创建、删除、标准上传等），那些 API 的规范见 `openlist-official-api-architecture.yaml`，本文件仅记录 OpenList_Chunk 独有的分块上传扩展端点。
+servers:
+  - url: https://openlist.example.com
+    description: 请替换为自己的 OpenList_Chunk 服务地址（不含末尾斜杠）
+
+tags:
+  - name: File System
+    description: 文件系统相关接口（分块上传扩展）
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ==================== Stream Chunking（本程序使用） ====================
+  /api/fs/put:
+    put:
+      tags:
+        - File System
+      operationId: upload_chunked
+      summary: 文件上传（Stream Chunking 模式，通过 Content-Range 头分派）
+      description: |
+        此端点在 OpenList_Chunk 中根据请求头中是否携带 `Content-Range` 自动分派到两种上传模式：
+
+        1. 标准模式（未携带 `Content-Range` 头）：与官方 OpenList 行为一致，
+           一次性 PUT 整文件，请求体受 CDN 单次请求体大小限制。
+
+        2. Stream Chunking 模式（携带 `Content-Range` 头，本程序 `chunked` 模式使用）：
+           - 请求头必须包含：`File-Path` + `Content-Range: bytes start-end/total`
+           - 每次请求携带一块数据（本程序使用 90MB 分块，低于 Cloudflare Free 100MB 限制），分块按序发送
+           - 服务端在第一个块（start=0）时创建 `io.Pipe` 并启动存储驱动上传；
+             后续块写入同一管道，零磁盘占用；最后一块写完管道关闭，上传完成
+           - 会话由服务端通过 `userID + path + totalSize` 键值在内存中维护，超时时间 10 分钟
+           - 此模式下 Cloudflare 只会看到每个 <100MB 的请求，不再拦截大文件
+
+        本程序在 `openlist_upload_mode: chunked` 时仅使用 Stream Chunking 路径。
+      parameters:
+        - name: File-Path
+          in: header
+          required: true
+          schema:
+            type: string
+          description: URL 编码后的目标文件绝对路径
+        - name: Overwrite
+          in: header
+          required: false
+          schema:
+            type: string
+            default: "true"
+          description: 若为 "false" 且远端已存在同名文件则返回 403
+        - name: Content-Range
+          in: header
+          required: false
+          schema:
+            type: string
+            pattern: '^bytes \d+-\d+/\d+$'
+          description: |
+            Stream Chunking 模式下必需；格式为 `bytes start-end/total`。
+            未携带此头时视为标准整文件上传（兼容官方 OpenList 行为）。
+        - name: Last-Modified
+          in: header
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: 文件修改时间戳（毫秒）；可选，未提供则使用服务端当前时间
+        - name: Content-Type
+          in: header
+          required: false
+          schema:
+            type: string
+          description: MIME 类型；可选，未提供则服务端根据后缀推断
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: |
+            标准模式：整文件上传成功（响应体 code=200）
+            Stream Chunking 模式：当前块成功接收；
+              若为最后一块，storage 驱动也同步写入完毕，响应体 `complete=true`
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - description: 标准模式 / Stream Chunking 非末块
+                    type: object
+                    properties:
+                      code:
+                        type: integer
+                        example: 200
+                      message:
+                        type: string
+                      data:
+                        type: object
+                        properties:
+                          received:
+                            type: integer
+                            description: 已接收字节数
+                          total:
+                            type: integer
+                            description: 文件总大小
+                          complete:
+                            type: boolean
+                            description: 是否完成全部块的接收
+                  - description: Stream Chunking 末块完成
+                    type: object
+                    properties:
+                      code:
+                        type: integer
+                        example: 200
+                      complete:
+                        type: boolean
+                        enum: [true]
+
+  # ==================== Form Chunked Upload（备用端点，本程序暂未使用） ====================
+  /api/fs/put/chunk/init:
+    post:
+      tags:
+        - File System
+      operationId: chunk_init
+      summary: 初始化 Form Chunked 上传会话（返回 upload_id）
+      description: |
+        OpenList_Chunk 提供的备用分块上传方式（"会话+磁盘缓存+流式合并"）。
+        本程序当前使用的是 Stream Chunking（`Content-Range`）路径，此端点列出仅供参考。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                path:
+                  type: string
+                  description: 目标文件绝对路径
+                total_chunks:
+                  type: integer
+                  description: 总块数
+                last_modified:
+                  type: integer
+                  format: int64
+                  description: 文件修改时间戳（毫秒）
+      responses:
+        '200':
+          description: 会话创建成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  data:
+                    type: object
+                    properties:
+                      upload_id:
+                        type: string
+                        format: uuid
+                        description: 用于后续上传块与合并的会话 ID
+
+  /api/fs/put/chunk:
+    put:
+      tags:
+        - File System
+      operationId: chunk_upload
+      summary: 上传单个 Form Chunked 数据块（multipart/form-data）
+      parameters:
+        - name: upload_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: index
+          in: query
+          required: true
+          schema:
+            type: integer
+            description: 当前块索引（从 0 开始）
+        - name: X-Chunk-CRC32
+          in: header
+          required: false
+          schema:
+            type: string
+            description: 当前块数据的 CRC32 十六进制哈希；服务端会校验
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: 块接收并校验成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  data:
+                    type: object
+                    properties:
+                      crc32:
+                        type: string
+
+  /api/fs/put/chunk/merge:
+    post:
+      tags:
+        - File System
+      operationId: chunk_merge
+      summary: 合并所有 Form Chunked 块并写入存储驱动
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                upload_id:
+                  type: string
+                  format: uuid
+                as_task:
+                  type: boolean
+                  default: false
+                overwrite:
+                  type: boolean
+                  default: true
+      responses:
+        '200':
+          description: 合并成功
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

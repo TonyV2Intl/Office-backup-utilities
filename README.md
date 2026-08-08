@@ -11,19 +11,19 @@ The source code is open under the MIT license and is fully annotated. Study, com
 
 ## 版本选择
 
-**稳定版本：6.2（推荐，最新，功能全面）或4.2（经过长期使用，运行稳定，依赖项少）  
-6.2Core版本在仅保留6.2版本基本的本地备份功能与新特性的同时最小化了依赖项，可按需取用**
+**稳定版本：6.3（推荐，最新，功能全面）或4.2（经过长期使用，运行稳定，依赖项少）  
+6.3Core版本在仅保留6.3版本基本的本地备份功能与新特性的同时最小化了依赖项，可按需取用**
 
 |版本|本地备份|托盘图标|对接Openlist|对接123云盘|配置文件编辑器|
 |--|--|--|--|--|--|
-|**6.2**|✅（单个程序）|✅|✅|✅（可通过Openlist挂载）|✅|
-|**6.2Core**|✅（单个程序）|❌|❌|❌|✅|
+|**6.3**|✅（单个程序）|✅|✅|✅（可通过Openlist挂载）|✅|
+|**6.3Core**|✅（单个程序）|❌|❌|❌|✅|
 |5.0|✅（单个程序）|✅|❌|✅（直接通过Python对接）|✅|
 |4.2|✅（三个独立程序）|❌|❌|❌|❌|
 
 ## 技术架构与核心工作流程
 
-以下是 6.2 版本的核心技术栈与运行流程：
+以下是 6.3 版本的核心技术栈与运行流程：
 
 ```mermaid
 flowchart TD
@@ -195,9 +195,9 @@ flowchart TD
 | **MD5 校验机制** | 通过 `hashlib` 分块（8KB）计算文件 MD5；文件已存在时自动比对 MD5，未变化则跳过备份，变化才重新备份；替代原有的固定跳过次数方案，更智能准确 |
 | **多线程架构** | `threading` 实现多线程：OpenList 后台初始化线程、上传处理线程、精确备份子线程；使用 `threading.Lock` 保证上传队列操作原子性；守护线程随主程序自动退出 |
 | **超时检测机制** | 自定义 `@timeout` 装饰器，子线程计时 + 主线程执行；超过配置阈值（默认10分钟）自动重启程序；解决 Windows 7 开机自启时可能出现的主线程死锁问题 |
-| **配置管理** | JSON 格式配置文件（`OBU6.2.json`）；程序启动时自动读取并补全缺失配置项；支持运行时动态修改配置（如精确备份成功后自动禁用） |
+| **配置管理** | JSON 格式配置文件（`OBU6.3.json`）；程序启动时自动读取并补全缺失配置项；支持运行时动态修改配置（如精确备份成功后自动禁用） |
 | **日志系统** | 统一 `log_print` 函数，自动追加时间戳与运行计数；支持控制台输出与文件写入双渠道；日志文件 `OBUlatest.log`，支持自动归档前次日志为 `OBUprevious.log`；支持按来源（`source` 参数）分类日志 |
-| **OpenList 云存储对接** | 使用 `alist3==1.3.1` 库的异步 API（`AListAsync`）；初始化时一次性拉取远端文件列表缓存，后续本地比对避免重复登录；上传队列机制，支持失败重试与最大重试次数配置；自动删除远端同名旧文件后再上传 |
+| **OpenList 云存储对接** | 使用 `alist3==1.3.1` 库的异步 API（`AListAsync`）负责登录、目录操作；初始化时一次性拉取远端文件列表缓存（若远端目录为空 `null` 会做显式处理避免报错），后续本地比对避免重复登录；上传队列机制，支持失败重试与最大重试次数配置；自动删除远端同名旧文件后再上传；**支持两种上传模式并可在配置中切换**：`standard` 模式（默认）使用 alist3 原生整文件 PUT，兼容官方 OpenList 后端；`chunked` 模式使用自行实现的 `Stream Chunking` 客户端（90MB 块 + `Content-Range` 头，基于 `aiohttp`），兼容 [OpenList_Chunk](https://github.com/zmabin/OpenList_Chunk) 后端并可绕开 Cloudflare Free计划下100MB的最大上传文件大小限制 |
 | **托盘图标（仅全功能版）** | `pystray` + `Pillow` 实现系统托盘图标；右键菜单支持显示/隐藏控制台、退出程序；图标使用 Base64 编码内嵌，无需外部文件依赖 |
 | **控制台窗口控制** | `ctypes` 调用 Windows API（`GetConsoleWindow` + `ShowWindow`）控制控制台显示/隐藏；可配置启动时是否显示控制台窗口 |
 | **打包发布** | 使用 Nuitka 编译为单文件 `.exe`，`--onefile` 模式；`--windows-icon-from-ico` 设置程序图标；MSVC 编译器确保 Windows 7 兼容性；GitHub Actions 自动构建 |
@@ -205,13 +205,13 @@ flowchart TD
 
 ## 使用方法
 
-### 6.2版本-直接运行（二进制文件）
+### 6.3版本-直接运行（二进制文件）
 
-1. 下载Release中的Officebackup6.2.exe（支持Windows7及以上系统）；如果要使用Openlist上传功能，请参照[官方文档](https://doc.oplist.org)**自行部署Openlist服务并挂载存储**，确保服务能在运行程序的环境下访问（除非是局域网访问（应该不可能），否则需要拥有公网可访问的域名/IP，或做好内网穿透）  
+1. 下载Release中的Officebackup6.3.exe（支持Windows7及以上系统）；如果要使用Openlist上传功能，请**自行部署 [OpenList](https://doc.oplist.org) 或其增强分支 [OpenList_Chunk](https://github.com/zmabin/OpenList_Chunk) 服务并挂载存储**，确保服务能在运行程序的环境下访问（除非是局域网访问（应该不可能），否则需要拥有公网可访问的域名/IP，或做好内网穿透）
 2. 下载ConfigEditor.exe，放置在主程序的同级目录下，按需修改配置项，方法[见下](#配置文件编辑器config-editor)
 3. （可选）把程序放在某个隐蔽的角落，右键创建一个快捷方式，按win+r打开运行框，输入shell:startup，这个文件夹是Windows启动项的文件夹，把快捷方式丢进去就可以实现开机自动以最小化窗口运行（不能直接将程序放在此文件夹中，无法生效）
 
-### 6.2版本-从源码运行
+### 6.3版本-从源码运行
 
 1. 安装Python 3.8及以上版本  
 2. 在命令行中执行以下命令安装依赖：  
@@ -226,13 +226,13 @@ flowchart TD
     pip install -r requirements.txt
     ```
 
-    如果是6.2Core版本，只需要安装pywin32库：  
+    如果是6.3Core版本，只需要安装pywin32库：  
 
     ```shell
     pip install pywin32
     ```
 
-3. 下载Officebackup6.2.py和ConfigEditor.py，放置在同级目录下，使用方法[同上](#62版本-直接运行二进制文件)  
+3. 下载Officebackup6.3.py和ConfigEditor.py，放置在同级目录下，使用方法[同上](#63版本-直接运行二进制文件)  
 
 ### 4.2版本-直接运行（二进制文件）
 
@@ -265,7 +265,7 @@ flowchart TD
 
 ![ConfigEditor配置编辑页面](./ReadmeIMG/ConfigEditor1.png "ConfigEditor配置编辑页面")  
 
-在左上角选择程序对应的版本（6.2、6.2Core或5.0），在下方按需修改配置项，所有修改将实时保存到配置文件  
+在左上角选择程序对应的版本（6.3、6.3Core或5.0），在下方按需修改配置项，所有修改将实时保存到配置文件  
 
 在右上角可以进行这些操作：  
 
@@ -276,7 +276,7 @@ flowchart TD
 
 > [!IMPORTANT]
 >
-> 1. 6.2版本中，若要启用Openlist上传功能，必须填入Openlist的服务器URL、用户名和目标文件夹路径（即`openlist_url`、`openlist_username`和`openlist_target_folder`三个配置项），程序启动时将校验参数完整性，若不完整将强制禁用Openlist上传功能  
+> 1. 6.3版本中，若要启用Openlist上传功能，必须填入Openlist的服务器URL、用户名和目标文件夹路径（即`openlist_url`、`openlist_username`和`openlist_target_folder`三个配置项），程序启动时将校验参数完整性，若不完整将强制禁用Openlist上传功能  
 > 2. 填入的Openlist用户必须至少拥有`写入内容（创建/上传/修改）`和`删除`权限  
 > ![Openlist用户配置](./ReadmeIMG/OpenlistUser.png "Openlist用户配置")  
 
@@ -287,9 +287,27 @@ $~$
 >
 > 1. 如果使用了Nginx或Openresty进行反向代理，请确保配置文件（`Nginx.conf`）中的`client_max_body_size`参数设置为大于等于上传文件的大小（Nginx默认为1MB，绝对不够用），下方为1Panel的修改示例（改成了5000MB）：
 > ![1Panel-OpenResty配置](./ReadmeIMG/1PanelOpenresty.png "1Panel-Openresty配置")
-> 2. 如果使用的是Cloudflare Free计划的域名，免费版会有100MB的最大上传文件大小限制，必须关闭该条解析的小黄云（代理），使用仅DNS模式，确保请求不经过Cloudflare网络（尽管这样可能导致服务器IP暴露，但是没办法，无论是开启开发模式还是配置缓存绕过规则都是没有用的）
+> 2. 如果使用的是Cloudflare Free计划的域名，免费版会有100MB的最大上传文件大小限制：
+> ·**方案A（推荐，无需暴露服务器IP）**：将服务端后端升级为 [OpenList_Chunk](https://github.com/zmabin/OpenList_Chunk)（这是OpenList的一个增强分支，配置文件和数据库完全兼容，从官方分支迁移的步骤请参见下方的tip），然后将 `openlist_upload_mode` 手动设置为 `chunked`（默认块大小 90MB 绕过 100MB 限制，保留CDN加速与防护）
+> ·方案B：若需使用官方后端，需要关闭该条解析的小黄云（代理），使用仅DNS模式，确保请求不经过Cloudflare网络（会暴露服务器IP）
 > ![Cloudflare-仅DNS模式](./ReadmeIMG/CloudflareDNS.png "Cloudflare-仅DNS模式")
 > 3. 如果都不行或觉得不妥，建议直接通过IP加端口号访问，如有防火墙或安全组记得放开Openlist所在端口（若使用Docker部署，默认为5244）
+
+$~$
+
+> [!TIP]
+> **从Openlist官方分支迁移的方式**
+>
+> 1. 在管理页面备份当前配置，然后停用官方容器
+> 2. 参阅OpenList_Chunk的[安装说明](https://github.com/zmabin/OpenList_Chunk/wiki/Migration-Instructions) 进行安装，如果使用Docker部署，启动后日志出现报错：`当前用户没有 ./data 目录（/opt/openlist/data）的写和/或执行权限`，这个错误是由于OpenList从v4.1.0版本开始为了安全而改用普通用户（UID 1001）运行容器所导致的，请运行`docker run --rm -v ./data:/opt/openlist/data axiilay/chown`来修复权限
+> 3. 启动Chunk分支的新容器，在管理页面还原配置，注意管理员和访客账户需要手动设置，无法通过配置文件还原
+
+$~$
+
+> [!NOTE]
+> 关于 `openlist_upload_mode` 的说明
+> ·`"standard"`（默认）：使用 alist3 库的原生上传方法，一次性 PUT 整个文件，兼容官方 OpenList 以及老版本的自建服务，但受 CDN 单次请求体大小限制影响较大
+> ·`"chunked"`：使用 **Stream Chunking + Content-Range** 的方式上传文件，每个HTTP请求仅携带90MB内容，兼容 OpenList_Chunk 后端，可有效绕过 CDN 上传大小限制；服务端零磁盘占用，通过 `io.Pipe` 直接将块管道入存储驱动
 
 $~$
 
@@ -312,7 +330,7 @@ $~$
 > · 备份成功后自动将 `accurate_backup_enable` 设为 `false` 并持久化到配置文件，避免同一目录被重复备份使文件遭到损坏  
 > · 如需再次备份，请在备份成功后手动重新启用该功能并（可选）更新源路径或目标路径  
 
-6.2版默认配置文件以及各配置项含义解释：  
+6.3版默认配置文件以及各配置项含义解释：  
 
 ```json
 {
@@ -331,6 +349,7 @@ $~$
     "openlist_username": "",   //OpenList用户名
     "openlist_password": "",   //OpenList密码
     "openlist_target_folder": "",   //目标文件夹路径（相对路径，根目录用"/"表示）
+    "openlist_upload_mode": "standard",   //OpenList上传模式，"standard"为标准上传（alist3库的原生方式，默认，兼容官方OpenList后端），"chunked"为分块上传（绕过CDN大小限制，需使用OpenList_Chunk后端）
     //文件夹精确备份功能
     "accurate_backup_enable": false,   //是否启用精确备份功能
     "accurate_backup_source_path": "",   //源路径，要备份的文件夹绝对路径
@@ -356,7 +375,7 @@ $~$
 在此页面中，可以测试COM接口和网络存储的连通性：  
 
 * COM接口测试：检查能否正常捕获Powerpoint、Word和WPS实例，若捕获到则会列出打开的文件名称  
-* 网络存储连通性测试：需要先在左侧选择对应版本（6.2对应Openlist，5.0对应123云盘API），并确保配置文件内的相关参数完整，然后运行测试：6.2版本会尝试登录Openlist账号，并创建一个临时文件，运行上传和删除测试；5.0版本会发送HTTP GET请求到<https://open.123pan.com/api/v1/file/list>，检查返回状态码是否为200
+* 网络存储连通性测试：需要先在左侧选择对应版本（6.3对应Openlist，5.0对应123云盘API），并确保配置文件内的相关参数完整，然后运行测试：6.3版本会尝试登录Openlist账号，并创建一个临时文件，运行上传和删除测试；5.0版本会发送HTTP GET请求到<https://open.123pan.com/api/v1/file/list>，检查返回状态码是否为200
 
 ## 程序由来
 
@@ -434,7 +453,7 @@ $~$
 
 1. **Openlist支持**：由于123云盘API不再对非会员用户开放，于是移除了对123云盘API的支持，**转而改用`alist3`库对接[Openlist](https://doc.oplist.org)**（一个著名的文件列表程序，支持50+种存储的挂载）；同时**将上传操作改为异步操作，在独立线程中运行**，避免阻塞主线程，支持配置最大重试次数和重试等待时间
 
-2. **超时检测机制**：实际测试中发现，在Windows7上以开机自启方式运行新版程序（6.2测试版）时，出现了运行一段时间后主线程死锁的问题，且每次开机都能稳定复现，如果不是在开机自启时运行的会话则不会出现死锁，且5.0版程序未发生过此类问题；针对该问题，**使用 `@timeout` 装饰器实现了超时检测功能**，在独立线程中针对四个备份操作函数（PPT、Word、WPS、文件夹精确备份）的执行时间计时，**如果超过阈值将强制结束当前程序并重启**，支持通过配置文件自定义超时时间
+2. **超时检测机制**：实际测试中发现，在Windows7上以开机自启方式运行新版程序（6.0测试版）时，出现了运行一段时间后主线程死锁的问题，且每次开机都能稳定复现，如果不是在开机自启时运行的会话则不会出现死锁，且5.0版程序未发生过此类问题；针对该问题，**使用 `@timeout` 装饰器实现了超时检测功能**，在独立线程中针对四个备份操作函数（PPT、Word、WPS、文件夹精确备份）的执行时间计时，**如果超过阈值将强制结束当前程序并重启**，支持通过配置文件自定义超时时间
 
 3. **MD5校验机制**：原先通过指定`max_skipping_time`配置项来判断重复出现的文件是否需要备份，不够智能；现在会**自动计算同名文件的MD5值并进行比较**，判断文件是否变化，只有文件变化才会备份，否则直接跳过
 
@@ -444,7 +463,7 @@ $~$
 
 6. 只读文件处理：新增`remove_readonly()`函数，备份前移除目标文件的只读属性
 
-7. 全功能主程序（6.2版本）可通过修改`hide_tray_icon`配置项来决定是否显示托盘图标
+7. 全功能主程序（6.0版本）可通过修改`hide_tray_icon`配置项来决定是否显示托盘图标
 
 8. 优化导入语句顺序，将原先分散在文件各处的导入语句统一移到文件开头
 
@@ -465,7 +484,7 @@ $~$
 ·`log_abnormal_upload` ：是否记录上传异常到 `OBUabnormal.txt` 文件
 ·`upload_cache_expire_seconds` ：上传缓存有效期（默认为30分钟，与Openlist默认缓存有效期一致）
 
-4. 简化 `Officebackup6.2.py` 的异常处理逻辑与日志输出逻辑，并在日志开头添加了版权信息和当前会话开始运行的时间戳
+4. 简化 `Officebackup6.1.py` 的异常处理逻辑与日志输出逻辑，并在日志开头添加了版权信息和当前会话开始运行的时间戳
 
 5. 仓库相关内容更新
 ·简化了Github Actions的打包配置，将主程序和Config Editor的打包都合并在单个工作流中管理
@@ -501,3 +520,30 @@ $~$
 ·大幅度简化 `Officebackup6.2.py` 和 `Officebackup6.2Core.py` 的主函数循环逻辑，提高代码可读性和可维护性
 
 6. Readme文件增加技术架构与核心工作流程图
+
+### 2026-08-09（6.3发布）
+
+1. **增加对 OpenList_Chunk 增强分支分块上传的支持**
+·新增 `chunked_stream_upload()` 函数，使用 **Stream Chunking + Content-Range** 方式实现分块流式上传（默认块大小 90MB），基于 `aiohttp` 库逐块 PUT 到 `/api/fs/put` 端点
+·兼容 [OpenList_Chunk](https://github.com/zmabin/OpenList_Chunk) 后端，服务端通过 `io.Pipe` 零拷贝管道直接写入存储驱动，可有效绕过Cloudflare Free计划100MB的最大上传文件大小限制
+·流式读取文件块，不再将整个文件一次性读入内存（原 `alist3` 库的 `upload()` 方法会全量读取）
+
+2. **修复空文件夹远端文件列表获取报错**
+·`alist3` 库的 `list_dir()` 方法在目标文件夹为空时会抛出 `'NoneType' object is not iterable` 异常（AList API 对空文件夹返回 `content: null` 而非空数组）
+·改为直接调用 `/api/fs/list` API 并显式判断 `content` 是否为 `None`，空文件夹正常返回 0 个文件
+
+3. **新增 `openlist_upload_mode` 配置项**
+·`"standard"`（默认）：使用 `alist3` 库原生 `upload()` 方法，一次性 PUT 整文件，兼容官方 OpenList 后端
+·`"chunked"`：使用自行实现的 Stream Chunking 客户端，需 OpenList_Chunk 后端，可绕过 CDN 上传大小限制
+·ConfigEditor 中以只读下拉框（Combobox）形式提供选择，归类到"OpenList参数"分组
+
+4. **API 架构文档拆分**
+·原 `openlist-api-architecture.yaml` 拆分为 `openlist-official-api-architecture.yaml`（官方 OpenList 标准 API）和 `openlist-chunk-api-architecture.yaml`（OpenList_Chunk 独有的分块上传扩展 API）两个独立文件
+·使用官方 OpenList 后端的用户只需导入 official 文件；使用 OpenList_Chunk 后端的用户可导入两个文件
+
+5. **README 文档更新**
+·核心技术栈表中"OpenList 云存储对接"部分更新，补充两种上传模式说明
+·413 错误处理段落重构：新增 Nginx 流式上传配置示例（`proxy_request_buffering off` 等），Cloudflare 部分新增"方案A（推荐 OpenList_Chunk + chunked 模式）"
+·默认配置文件 JSON 示例新增 `openlist_upload_mode` 配置项
+·新增 `openlist_upload_mode` 两种取值的详细说明
+·新增从 OpenList 官方分支迁移到 OpenList_Chunk 的 TIP 提示

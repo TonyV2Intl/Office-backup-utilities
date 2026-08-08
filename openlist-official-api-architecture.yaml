@@ -1,0 +1,246 @@
+openapi: 3.0.3
+info:
+  title: OpenList API (Official — OpenList Team/OpenList)
+  description: |
+    此 OpenAPI 规范描述了本程序（Office Backup Utilities 6.x）与官方OpenList（https://github.com/OpenListTeam/OpenList）后端交互时使用的全部 API。
+
+    对应程序端的 `openlist_upload_mode: standard` 配置项：使用 `alist3==1.3.1` 库原生 `upload()` 方法，一次性 PUT 整文件到 `/api/fs/put`，不携带 `Content-Range` 头。
+
+    如需绕过 Cloudflare Free 等 CDN 的 100MB 上传大小限制，请改用 OpenList_Chunk 后端，对应的 API 规范见 `openlist-chunk-api-architecture.yaml`。
+servers:
+  - url: https://openlist.example.com
+    description: 请替换为自己的 OpenList 服务地址（不含末尾斜杠）
+
+tags:
+  - name: Auth
+    description: 认证相关接口
+  - name: File System
+    description: 文件系统相关接口（列出、创建目录、删除、上传等）
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ==================== 认证 ====================
+  /api/auth/login:
+    post:
+      tags:
+        - Auth
+      operationId: login
+      summary: 用户登录（用户名+密码，返回 JWT Token）
+      security: []
+      description: |
+        本程序使用 `/api/auth/login/hash` 端点（alist3 SDK 内部调用），请求体与响应同 `login`。
+        登录成功后从响应 `data.token` 中获取 JWT，并在后续请求中放到 `Authorization: <token>` 请求头。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                otp_code:
+                  type: string
+                  description: 双因素验证码（可选，未启用 OTP 时留空）
+              required:
+                - username
+                - password
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  message:
+                    type: string
+                    example: success
+                  data:
+                    type: object
+                    properties:
+                      token:
+                        type: string
+                        description: JWT Token，后续请求放到 Authorization 头
+
+  # ==================== 文件系统 ====================
+  /api/fs/list:
+    post:
+      tags:
+        - File System
+      operationId: list_dir
+      summary: 分页列出指定目录下的文件/文件夹
+      description: |
+        程序初始化时一次性拉取远端目标文件夹内的所有文件，建立本地文件名集合缓存，
+        后续 MD5 相同的备份文件通过本地集合判断是否需要上传，无需每次调用远端 API。
+        注意：空文件夹时 `data.content` 为 `null` 而非空数组，客户端需显式判断。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                path:
+                  type: string
+                  description: 要列出的目录路径（绝对路径，根目录为 `/`）
+                password:
+                  type: string
+                  description: 目录密码（无密码时为空字符串）
+                page:
+                  type: integer
+                  default: 1
+                per_page:
+                  type: integer
+                  default: 50
+                refresh:
+                  type: boolean
+                  default: false
+      responses:
+        '200':
+          description: 列表成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  data:
+                    type: object
+                    properties:
+                      content:
+                        type: array
+                        nullable: true
+                        items:
+                          type: object
+                          properties:
+                            name:
+                              type: string
+                            is_dir:
+                              type: boolean
+                            size:
+                              type: integer
+
+  /api/fs/mkdir:
+    post:
+      tags:
+        - File System
+      operationId: mkdir
+      summary: 创建目录（已存在则视为成功）
+      description: 程序初始化时以及每次上传前都会通过 mkdir 检查目标文件夹路径是否有效
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                path:
+                  type: string
+      responses:
+        '200':
+          description: OK
+
+  /api/fs/remove:
+    post:
+      tags:
+        - File System
+      operationId: remove
+      summary: 删除文件（或文件夹）
+      description: 上传同文件名前先调用此接口删除远端旧文件，避免上传后出现多个同名文件
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dir:
+                  type: string
+                  description: 父目录路径
+                names:
+                  type: array
+                  description: 要删除的文件名数组（不含目录）
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: OK
+
+  /api/fs/put:
+    put:
+      tags:
+        - File System
+      operationId: upload
+      summary: 文件上传（标准整文件模式）
+      description: |
+        标准上传模式（`openlist_upload_mode: standard`）：
+        - 请求头必须包含：`File-Path: url_encoded_abs_path`
+        - 请求体：整个文件的原始二进制数据
+        - Content-Length：等于文件大小
+        - 不携带 `Content-Range` 头
+        - 注意：如果后端位于 Cloudflare Free 等 CDN 之后，单请求体受 100MB 限制
+      parameters:
+        - name: File-Path
+          in: header
+          required: true
+          schema:
+            type: string
+          description: URL 编码后的目标文件绝对路径
+        - name: Overwrite
+          in: header
+          required: false
+          schema:
+            type: string
+            default: "true"
+          description: 若为 "false" 且远端已存在同名文件则返回 403
+        - name: Last-Modified
+          in: header
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: 文件修改时间戳（毫秒）；可选，未提供则使用服务端当前时间
+        - name: Content-Type
+          in: header
+          required: false
+          schema:
+            type: string
+          description: MIME 类型；可选，未提供则服务端根据后缀推断
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: 上传成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  message:
+                    type: string
+                    example: success
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

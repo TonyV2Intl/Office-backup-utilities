@@ -37,7 +37,7 @@ default_config = {
     "backup_timeout": 600,   #备份操作超时时间，单位为秒（默认10分钟）
 }
 try:   #读取配置文件
-    with open('OBU6.2Core.json', 'r', encoding='utf-8') as f:   #尝试读取配置文件（只读）
+    with open('OBU6.3Core.json', 'r', encoding='utf-8') as f:   #尝试读取配置文件（只读）
         config = json.load(f)
     config_changed = False
     for key, value in default_config.items():   #如果现有配置文件有缺漏，根据默认配置项自动补全
@@ -45,11 +45,11 @@ try:   #读取配置文件
             config[key] = value
             config_changed = True
     if config_changed:   #如果配置文件有新增项，写回配置文件
-        with open('OBU6.2Core.json', 'w', encoding='utf-8') as f:
+        with open('OBU6.3Core.json', 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=4, ensure_ascii=False)
 except (FileNotFoundError, json.JSONDecodeError):   #若配置文件不存在或无法解析
     config = default_config   #使用默认配置
-    with open('OBU6.2Core.json', 'w', encoding='utf-8') as f:   #在当前目录下根据默认配置文件创建（写入）
+    with open('OBU6.3Core.json', 'w', encoding='utf-8') as f:   #在当前目录下根据默认配置文件创建（写入）
         json.dump(config, f, indent=4, ensure_ascii=False)   #写入默认配置文件
 
 
@@ -65,7 +65,7 @@ if config.get('save_log'):   #检查是否启用日志保存功能
             os.remove('OBUlatest.log')
     log_file = open('OBUlatest.log', 'a', encoding='utf-8')   #以追加模式打开日志文件
     # 写入版权信息和开始运行时间戳到控制台和日志文件
-    header = 'Office Backup Utilities 6.2 Core\nCopyright (C) 2024-2026 TonyV2Intl\nSession starts at: ' + time.strftime('%Y-%m-%d %H:%M:%S')
+    header = 'Office Backup Utilities 6.3 Core\nCopyright (C) 2024-2026 TonyV2Intl\nSession starts at: ' + time.strftime('%Y-%m-%d %H:%M:%S')
     print(header + '\n')
     log_file.write(header + '\n\n')
     log_file.flush()   #刷新文件缓冲区，确保日志消息立即写入文件
@@ -343,7 +343,7 @@ def accurate_backup():   #定义精确备份函数
             
             config['accurate_backup_enable'] = False   #当前会话禁用精确备份功能
             try:
-                with open('OBU6.2Core.json', 'w', encoding='utf-8') as f:
+                with open('OBU6.3Core.json', 'w', encoding='utf-8') as f:
                     json.dump(config, f, indent=4, ensure_ascii=False)
                 log_print('Accurate backup disabled after successful backup')
             except Exception as e:

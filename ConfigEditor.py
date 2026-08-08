@@ -23,13 +23,13 @@ class ConfigEditor:
                 "cloud_section": "123云盘参数",
                 "cloud_params": ["client_id", "client_secret", "access_token", "folder_id"]
             },
-            "6.2": {
-                "config_file": "OBU6.2.json",
+            "6.3": {
+                "config_file": "OBU6.3.json",
                 "cloud_section": "OpenList参数",
-                "cloud_params": ["openlist_url", "openlist_username", "openlist_password", "openlist_target_folder"]
+                "cloud_params": ["openlist_url", "openlist_username", "openlist_password", "openlist_target_folder", "openlist_upload_mode"]
             },
-            "6.2Core": {
-                "config_file": "OBU6.2Core.json",
+            "6.3Core": {
+                "config_file": "OBU6.3Core.json",
                 "cloud_section": None,
                 "cloud_params": []
             }
@@ -88,7 +88,7 @@ class ConfigEditor:
         version_combobox = ttk.Combobox(
             version_frame, 
             textvariable=self.version_var, 
-            values=["5.0", "6.2", "6.2Core"],
+            values=["5.0", "6.3", "6.3Core"],
             state="readonly",
             width=10,
             takefocus=False
@@ -255,7 +255,7 @@ class ConfigEditor:
         test_version_combobox = ttk.Combobox(
             version_frame, 
             textvariable=self.test_version_var, 
-            values=["5.0", "6.2"],
+            values=["5.0", "6.3"],
             state="readonly",
             width=10,
             takefocus=False
@@ -453,8 +453,8 @@ class ConfigEditor:
                             ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
                         self.root.after(0, show_error)
             
-            # 测试 OpenList (版本 6.2)
-            elif version == "6.2":
+            # 测试 OpenList (版本 6.3)
+            elif version == "6.3":
                 openlist_url = config.get("openlist_url")
                 if openlist_url:
                     openlist_url = openlist_url.rstrip('/')
@@ -722,7 +722,7 @@ class ConfigEditor:
                 "show_console_window_at_startup": False,
                 "save_log": True
             }
-        elif self.current_version == "6.2":
+        elif self.current_version == "6.3":
             return {
                 "ppt_backup_path": "C:\\Officebackup\\pptbackup",
                 "word_backup_path": "C:\\Officebackup\\wordbackup",
@@ -735,6 +735,7 @@ class ConfigEditor:
                 "openlist_username": "",
                 "openlist_password": "",
                 "openlist_target_folder": "",
+                "openlist_upload_mode": "standard",
                 "accurate_backup_enable": False,
                 "accurate_backup_source_path": "",
                 "accurate_backup_target_path": "",
@@ -747,7 +748,7 @@ class ConfigEditor:
                 "upload_retry_wait": 30,
                 "upload_max_retries": ""
             }
-        elif self.current_version == "6.2Core":
+        elif self.current_version == "6.3Core":
             return {
                 "ppt_backup_path": "C:\\Officebackup\\pptbackup",
                 "word_backup_path": "C:\\Officebackup\\wordbackup",
@@ -794,7 +795,7 @@ class ConfigEditor:
         if cloud_section and cloud_params:
             if self.current_version == "5.0" and "upload_to_123pan_enable" in default_config:
                 sections["功能开关"].append("upload_to_123pan_enable")
-            elif self.current_version == "6.2" and "upload_to_openlist_enable" in default_config:
+            elif self.current_version == "6.3" and "upload_to_openlist_enable" in default_config:
                 sections["功能开关"].append("upload_to_openlist_enable")
             sections[cloud_section] = [k for k in cloud_params if k in default_config]
         
@@ -802,13 +803,13 @@ class ConfigEditor:
         sections["精确备份"] = [k for k in ["accurate_backup_enable", "accurate_backup_source_path", "accurate_backup_target_path"] if k in default_config]
         
         # 添加控制台和日志设置，只包含当前版本默认配置中存在的键
-        if self.current_version == "6.2":
+        if self.current_version == "6.3":
             sections["界面与日志"] = [k for k in ["hide_tray_icon", "show_console_window_at_startup", "save_log", "archive_previous_log", "log_abnormal_upload"] if k in default_config]
         else:
             sections["控制台与日志"] = [k for k in ["show_console_window_at_startup", "save_log", "archive_previous_log"] if k in default_config]
         
         # 添加超时和重试设置，只包含当前版本默认配置中存在的键
-        if self.current_version == "6.2":
+        if self.current_version == "6.3":
             sections["超时与重试"] = [k for k in ["backup_timeout", "upload_retry_wait", "upload_max_retries"] if k in default_config]
         else:
             sections["超时设置"] = [k for k in ["backup_timeout"] if k in default_config]
@@ -852,9 +853,13 @@ class ConfigEditor:
         else:  # 字符串
             var = tk.StringVar(value=str(value))
             var.trace_add("write", lambda *args, k=key, v=var: self.on_config_change(k, v.get()))
-            
+
+            # 为OpenList上传模式提供下拉选择
+            if key == "openlist_upload_mode":
+                combo = ttk.Combobox(frame, textvariable=var, values=["chunked", "standard"], state="readonly", takefocus=False)
+                combo.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
             # 为路径类型的配置项添加浏览按钮
-            if "_path" in key:
+            elif "_path" in key:
                 entry_frame = ttk.Frame(frame)
                 entry_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
                 entry = ttk.Entry(entry_frame, textvariable=var, takefocus=False)
@@ -1021,6 +1026,7 @@ class ConfigEditor:
             "openlist_username": "OpenList用户名",
             "openlist_password": "OpenList密码",
             "openlist_target_folder": "OpenList目标文件夹",
+            "openlist_upload_mode": "OpenList上传模式",
             "accurate_backup_enable": "启用精确备份",
             "accurate_backup_source_path": "精确备份源路径",
             "accurate_backup_target_path": "精确备份目标路径",
@@ -1049,8 +1055,8 @@ class ConfigEditor:
         # 根据版本确定程序文件
         program_files = {
             "5.0": "OfficebackupSingle5.0",
-            "6.2": "Officebackup6.2",
-            "6.2Core": "Officebackup6.2Core"
+            "6.3": "Officebackup6.3",
+            "6.3Core": "Officebackup6.3Core"
         }
         
         if version in program_files:

@@ -38,6 +38,7 @@ default_config = {
     "openlist_username": "",   #OpenList用户名
     "openlist_password": "",   #OpenList密码
     "openlist_target_folder": "",   #目标文件夹路径（相对路径，根目录用"/"表示）
+    "openlist_upload_mode": "standard",   #OpenList上传模式，"standard"为标准上传（原alist3库方式，默认，兼容官方OpenList后端），"chunked"为分块上传（绕过CDN大小限制，需OpenList_Chunk后端）
     #文件夹精确备份功能
     "accurate_backup_enable": False,   #是否启用文件夹精确备份功能
     "accurate_backup_source_path": "",   #精确备份源文件夹路径
@@ -55,7 +56,7 @@ default_config = {
     "upload_max_retries": ""   #上传最大重试次数，默认为空，表示无限次重试
 }
 try:   #读取配置文件
-    with open('OBU6.2.json', 'r', encoding='utf-8') as f:   #尝试读取配置文件（只读）
+    with open('OBU6.3.json', 'r', encoding='utf-8') as f:   #尝试读取配置文件（只读）
         config = json.load(f)   #加载JSON配置内容
     config_changed = False   #标记配置是否有变更
     for key, value in default_config.items():   #如果现有配置文件有缺漏，根据默认配置项自动补全
@@ -63,11 +64,11 @@ try:   #读取配置文件
             config[key] = value   #添加缺失的配置项
             config_changed = True   #标记配置已变更
     if config_changed:   #如果配置文件有新增项，写回配置文件
-        with open('OBU6.2.json', 'w', encoding='utf-8') as f:   #以写入模式打开配置文件
+        with open('OBU6.3.json', 'w', encoding='utf-8') as f:   #以写入模式打开配置文件
             json.dump(config, f, indent=4, ensure_ascii=False)   #写回更新后的配置
 except (FileNotFoundError, json.JSONDecodeError):   #若配置文件不存在或无法解析
     config = default_config   #使用默认配置
-    with open('OBU6.2.json', 'w', encoding='utf-8') as f:   #在当前目录下根据默认配置文件创建（写入）
+    with open('OBU6.3.json', 'w', encoding='utf-8') as f:   #在当前目录下根据默认配置文件创建（写入）
         json.dump(config, f, indent=4, ensure_ascii=False)   #写入默认配置文件
 
 
@@ -83,7 +84,7 @@ if config.get('save_log'):   #检查是否启用日志保存功能
             os.remove('OBUlatest.log')   #删除旧日志文件
     log_file = open('OBUlatest.log', 'a', encoding='utf-8')   #以追加模式打开日志文件
     # 写入版权信息和开始运行时间戳到控制台和日志文件
-    header = 'Office Backup Utilities 6.2\nCopyright (C) 2024-2026 TonyV2Intl\nSession starts at: ' + time.strftime('%Y-%m-%d %H:%M:%S')   #构建日志头信息
+    header = 'Office Backup Utilities 6.3\nCopyright (C) 2024-2026 TonyV2Intl\nSession starts at: ' + time.strftime('%Y-%m-%d %H:%M:%S')   #构建日志头信息
     print(header + '\n')   #打印到控制台
     log_file.write(header + '\n\n')   #写入日志文件
     log_file.flush()   #刷新文件缓冲区，确保日志消息立即写入文件
@@ -181,6 +182,62 @@ if config.get('upload_to_openlist_enable'):   #只有启用上传功能时才进
 
 
 
+#OpenList_Chunk分块上传的块大小（字节），设置为90MB以绕过Cloudflare免费版100MB的上传大小限制
+OPENLIST_CHUNK_SIZE = 90 * 1024 * 1024
+
+async def chunked_stream_upload(client, target_file_path, local_file_path):   #使用Stream Chunking方式分块上传文件，绕过CDN上传大小限制（OpenList_Chunk后端通过Content-Range头实现零拷贝管道流式上传）
+    from urllib.parse import quote   #导入URL编码函数
+    import aiohttp   #导入aiohttp库用于异步HTTP请求
+
+    file_size = os.path.getsize(local_file_path)   #获取本地文件大小
+    if file_size == 0:   #如果是空文件
+        return await client.upload(target_file_path, local_file_path)   #空文件直接使用标准上传（无需分块）
+
+    encoded_path = quote(target_file_path)   #对目标文件路径进行URL编码
+    base_headers = {   #构建基础请求头
+        "Authorization": client.token,   #JWT认证令牌（登录后从client对象获取）
+        "File-Path": encoded_path,   #目标文件路径（URL编码）
+        "Overwrite": "true",   #覆盖已存在的远端文件
+        "User-Agent": client.headers.get("User-Agent", ""),   #用户代理
+    }
+
+    upload_url = client.endpoint.rstrip('/') + '/api/fs/put'   #构建上传URL（与标准AList流式上传相同的端点）
+    total_chunks = (file_size + OPENLIST_CHUNK_SIZE - 1) // OPENLIST_CHUNK_SIZE   #计算总块数（向上取整）
+
+    if total_chunks > 1:   #如果需要分块上传（文件大于块大小）
+        log_print('Chunked upload: ' + str(total_chunks) + ' chunks, chunk size: ' + str(round(OPENLIST_CHUNK_SIZE / 1024 / 1024, 2)) + ' MB', source='openlist')   #记录分块上传信息
+
+    async with aiohttp.ClientSession() as session:   #创建异步HTTP会话
+        with open(local_file_path, 'rb') as f:   #以二进制只读模式打开本地文件
+            sent = 0   #已发送字节数
+            chunk_index = 0   #当前块索引（从0开始）
+            while sent < file_size:   #循环发送所有块直到文件结束
+                chunk_data = f.read(OPENLIST_CHUNK_SIZE)   #从文件读取一块数据
+                if not chunk_data:   #如果读取到空数据（文件已读完）
+                    break   #退出循环
+                chunk_len = len(chunk_data)   #当前块实际大小（字节）
+                start = sent   #当前块在文件中的起始字节位置
+                end = sent + chunk_len - 1   #当前块在文件中的结束字节位置
+                content_range = "bytes " + str(start) + "-" + str(end) + "/" + str(file_size)   #构建Content-Range头（格式：bytes start-end/total）
+
+                headers = base_headers.copy()   #复制基础请求头（避免修改原始头）
+                headers["Content-Range"] = content_range   #设置Content-Range头（触发服务器分块上传逻辑）
+
+                async with session.put(upload_url, data=chunk_data, headers=headers) as response:   #发送PUT请求上传当前块
+                    result = await response.json()   #解析服务器响应JSON
+                    if result.get("code") != 200:   #如果服务器返回非200状态码（上传失败）
+                        raise Exception("Chunk " + str(chunk_index) + "/" + str(total_chunks) + " upload failed: " + str(result.get("message", "unknown error")))   #抛出异常，由外层错误处理捕获
+
+                sent += chunk_len   #更新已发送字节数
+                chunk_index += 1   #块索引加1
+
+                if total_chunks > 1:   #如果分块上传（多块文件）
+                    log_print('Chunk ' + str(chunk_index) + '/' + str(total_chunks) + ' uploaded (' + str(round(chunk_len / 1024 / 1024, 2)) + ' MB)', source='openlist')   #记录当前块上传进度
+
+    return True   #返回上传成功
+
+
+
 def upload_to_openlist_thread():   #在单独线程中执行上传操作
     retry_count = 0   #初始化重试计数器
     max_retries = config.get('upload_max_retries')   #获取最大重试次数配置
@@ -261,9 +318,12 @@ def upload_to_openlist_thread():   #在单独线程中执行上传操作
                     file_size = os.path.getsize(upload_source_path)   #获取本地文件大小
                     log_print('Uploading: ' + upload_file + ', file size: ' + str(round(file_size / 1024, 2)) + ' KB', source='openlist')   #记录上传信息
                     
-                    # 使用 client.upload 方法，添加错误处理
+                    # 根据配置的上传模式选择上传方法，添加错误处理
                     try:
-                        upload_result = await client.upload(target_file_path, upload_source_path)   #异步执行上传
+                        if config.get('openlist_upload_mode') == 'standard':   #标准上传模式（使用alist3库的原生upload方法）
+                            upload_result = await client.upload(target_file_path, upload_source_path)   #异步执行标准上传
+                        else:   #分块上传模式（默认，使用OpenList_Chunk的Stream Chunking绕过CDN上传大小限制）
+                            upload_result = await chunked_stream_upload(client, target_file_path, upload_source_path)   #异步执行分块上传
                         if upload_result:   #上传成功
                             log_print('Upload to OpenList successfully: ' + upload_file, source='openlist')   #记录成功日志
                         else:   #上传返回False
@@ -369,35 +429,43 @@ def test_openlist_connection():   #测试OpenList连接（登录+目标文件夹
         from alist import AListUser, AListAsync   #导入AList3SDK
         import asyncio   #导入asyncio模块
         
-        async def async_fetch_remote_files(client):   #异步获取远端文件列表
+        async def async_fetch_remote_files(client):   #异步获取远端文件列表（直接调用API避免alist3库在空文件夹时抛出NoneType异常）
             global openlist_remote_files   #声明全局变量
             files_set = set()   #初始化文件集合
             page = 1   #初始化页码
             per_page = 100   #每页获取100个文件
-            
+
             while True:   #循环获取所有分页
                 try:
-                    items = []   #初始化当前页项目列表
-                    async for item in client.list_dir(openlist_target_folder, page=page, per_page=per_page):   #异步遍历目录
-                        items.append(item)   #添加项目到列表
+                    data = json.dumps({   #构建请求体
+                        "path": openlist_target_folder,   #目标文件夹路径
+                        "password": "",   #文件夹密码（空）
+                        "page": page,   #页码
+                        "per_page": per_page,   #每页数量
+                        "refresh": False   #是否刷新缓存
+                    })
+                    r = await client._request("POST", "/api/fs/list", data=data, headers=client.headers)   #直接调用AList API获取文件列表
+                    client._isBadRequest(r, "获取失败")   #检查请求是否成功（code != 200时抛出异常）
+                    content = r.get("data", {}).get("content")   #获取文件列表内容（空文件夹时AList API返回null）
+                    if content is None:   #如果内容为None（空文件夹）
+                        break   #退出循环，无需记录错误
+                    items = content   #获取文件列表项
                 except Exception as e:   #获取失败
                     log_print('Failed to fetch remote file list (page ' + str(page) + '): ' + str(e), source='openlist')   #记录错误
                     break   #退出循环
-                
+
                 if not items:   #如果当前页为空
                     break   #退出循环
-                
+
                 for item in items:   #遍历当前页项目
-                    if not item.is_dir:   #检查是否为文件
-                        file_name = str(item.path).split('/')[-1]   #提取文件名
-                        if '\\' in file_name:   #处理Windows路径分隔符
-                            file_name = file_name.split('\\')[-1]   #重新提取文件名
+                    if not item.get("is_dir", False):   #检查是否为文件（非文件夹）
+                        file_name = item.get("name", "")   #直接从API响应获取文件名
                         files_set.add(file_name)   #添加到文件集合
-                
+
                 if len(items) < per_page:   #检查是否为最后一页
                     break   #退出循环
                 page += 1   #页码加1
-            
+
             openlist_remote_files = files_set   #更新全局远端文件缓存
             log_print('Fetched ' + str(len(files_set)) + ' files from remote folder', source='openlist')   #记录获取文件数量
             return True   #返回成功
@@ -754,7 +822,7 @@ def accurate_backup():   #定义精确备份函数
             
             config['accurate_backup_enable'] = False   #当前会话禁用精确备份功能
             try:
-                with open('OBU6.2.json', 'w', encoding='utf-8') as f:   #打开配置文件
+                with open('OBU6.3.json', 'w', encoding='utf-8') as f:   #打开配置文件
                     json.dump(config, f, indent=4, ensure_ascii=False)   #写回配置
                 log_print('Accurate backup disabled after successful backup')   #记录禁用信息
             except Exception as e:   #写入失败

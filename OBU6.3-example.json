@@ -10,6 +10,7 @@
     "openlist_username": "",
     "openlist_password": "",
     "openlist_target_folder": "",
+    "openlist_upload_mode": "standard",
     "accurate_backup_enable": false,
     "accurate_backup_source_path": "",
     "accurate_backup_target_path": "",
