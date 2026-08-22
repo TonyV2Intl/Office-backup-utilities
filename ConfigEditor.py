@@ -3,6 +3,20 @@ from tkinter import ttk, messagebox, filedialog
 import json
 import os
 import copy
+import subprocess
+import sys
+from urllib.parse import urlparse
+
+def validate_openlist_url(url):
+    try:
+        parsed_url = urlparse(url)
+        hostname = parsed_url.hostname
+    except (AttributeError, TypeError, ValueError):
+        return False, False
+    if parsed_url.scheme.lower() not in ('http', 'https') or not parsed_url.netloc or not hostname:
+        return False, False
+    is_plain_http = parsed_url.scheme.lower() == 'http' and hostname.lower() not in ('localhost', '127.0.0.1', '::1')
+    return True, is_plain_http
 
 class ConfigEditor:
     def __init__(self, root):
@@ -458,6 +472,7 @@ class ConfigEditor:
                 openlist_url = config.get("openlist_url")
                 if openlist_url:
                     openlist_url = openlist_url.rstrip('/')
+                url_valid, plain_http_warning = validate_openlist_url(openlist_url)
                 openlist_username = config.get("openlist_username")
                 openlist_password = config.get("openlist_password")
                 openlist_target_folder = config.get("openlist_target_folder", "/")
@@ -476,6 +491,14 @@ class ConfigEditor:
                         elapsed_time = time.time() - start_time
                         ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
                     self.root.after(0, show_incomplete_params)
+                elif not url_valid:
+                    def show_invalid_url():
+                        for widget in self.conn_test_results_frame.winfo_children():
+                            widget.destroy()
+                        ttk.Label(self.conn_test_results_frame, text="OpenList服务器URL无效，仅支持http://或https://地址", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+                        elapsed_time = time.time() - start_time
+                        ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
+                    self.root.after(0, show_invalid_url)
                 else:
                     # 测试 OpenList 连通性
                     try:
@@ -494,6 +517,8 @@ class ConfigEditor:
                             result_frame.pack(fill=tk.X, padx=5, pady=2)
                             ttk.Label(result_frame, text=f"  服务器 URL: {openlist_url}").pack(anchor=tk.W, padx=10, pady=1)
                             ttk.Label(result_frame, text=f"  用户名: {openlist_username}").pack(anchor=tk.W, padx=10, pady=1)
+                            if plain_http_warning:
+                                ttk.Label(result_frame, text="  安全警告：此服务器使用明文HTTP，凭据和JWT将以未加密方式传输", foreground="red").pack(anchor=tk.W, padx=10, pady=1)
                             ttk.Label(result_frame, text=f"  上传测试进行中...", foreground="blue").pack(anchor=tk.W, padx=10, pady=1)
                         
                         # 更新上传测试结果
@@ -1062,12 +1087,11 @@ class ConfigEditor:
         if version in program_files:
             base_name = program_files[version]
             # 优先尝试启动 py 文件
-            py_file = f"{base_name}.py"
+            py_file = os.path.abspath(f"{base_name}.py")
             if os.path.exists(py_file):
                 # 启动 py 文件
                 try:
-                    import subprocess
-                    subprocess.Popen(["python", py_file])
+                    subprocess.Popen([sys.executable, py_file])
                     self.status_var.set(f"已启动{version}版本程序")
                     messagebox.showinfo("成功", f"已启动{version}版本程序")
                     return
@@ -1077,11 +1101,10 @@ class ConfigEditor:
                     return
             
             # 如果 py 文件不存在，尝试启动 exe 文件
-            exe_file = f"{base_name}.exe"
+            exe_file = os.path.abspath(f"{base_name}.exe")
             if os.path.exists(exe_file):
                 # 启动 exe 文件
                 try:
-                    import subprocess
                     subprocess.Popen([exe_file])
                     self.status_var.set(f"已启动{version}版本程序")
                     messagebox.showinfo("成功", f"已启动{version}版本程序")

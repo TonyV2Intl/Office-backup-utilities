@@ -16,6 +16,7 @@ import json  #导入json库，用于处理配置文件的读写
 import ctypes   #导入ctypes库，用于调用Windows API函数
 import subprocess  #导入subprocess模块，用于启动新进程
 import asyncio  #导入asyncio模块，用于异步操作
+from urllib.parse import urlparse  #导入URL解析函数，用于验证OpenList服务器地址
 
 
 
@@ -144,6 +145,17 @@ def add_to_upload_queue(file_name, file_path):   #原子性地添加文件到上
 
 def is_file_on_openlist(file_name):   #检查文件是否存在于远端OpenList目标文件夹中（使用本地缓存）
     return file_name in openlist_remote_files
+
+def validate_openlist_url(url):   #验证OpenList服务器地址并判断是否需要明文传输警告
+    try:   #尝试解析服务器地址
+        parsed_url = urlparse(url)
+        hostname = parsed_url.hostname
+    except (AttributeError, TypeError, ValueError):   #地址格式无效
+        return False, False
+    if parsed_url.scheme.lower() not in ('http', 'https') or not parsed_url.netloc or not hostname:   #检查地址协议和主机
+        return False, False
+    is_plain_http = parsed_url.scheme.lower() == 'http' and hostname.lower() not in ('localhost', '127.0.0.1', '::1')   #判断是否为非本机明文HTTP
+    return True, is_plain_http
     
 #从配置文件读取变量
 sleeptime=config.get('interval')   #轮询间隔（默认为60秒）
@@ -170,6 +182,12 @@ if config.get('upload_to_openlist_enable'):   #只有启用上传功能时才进
     openlist_url = config.get('openlist_url')   #读取服务器URL
     if openlist_url:   #如果URL不为空
         openlist_url = openlist_url.rstrip('/')   #移除末尾斜杠
+        url_valid, plain_http_warning = validate_openlist_url(openlist_url)   #验证OpenList服务器地址
+        if not url_valid:   #如果服务器地址无效
+            log_print('Invalid OpenList URL scheme or host, upload function disabled for this session', source='openlist')   #记录地址无效
+            config['upload_to_openlist_enable'] = False   #当前会话禁用上传功能（不修改配置文件）
+        elif plain_http_warning:   #如果使用非本机明文HTTP
+            log_print('[SECURITY WARNING] OpenList URL uses plain HTTP; credentials and JWT will be transmitted unencrypted', source='openlist')   #记录明文传输安全警告
     openlist_username = config.get('openlist_username')   #读取用户名
     openlist_password = config.get('openlist_password')   #读取密码
     openlist_target_folder = config.get('openlist_target_folder')   #读取目标文件夹路径
