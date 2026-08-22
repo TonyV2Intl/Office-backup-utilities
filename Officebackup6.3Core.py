@@ -191,7 +191,7 @@ def timeout(seconds, config_key=None):
                     # 先打印超时信息（此时日志文件还未关闭）
                     log_print(f"Function {func.__name__} exceeded timeout of {timeout_value} seconds, restarting program")
                     # 关闭日志文件，解除占用
-                    if 'log_file' in globals():
+                    if 'log_file' in globals() and log_file is not None and not log_file.closed:
                         try:
                             log_file.close()
                             # 注意：关闭后不要再调用 log_print
