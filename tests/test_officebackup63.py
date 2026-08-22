@@ -362,8 +362,9 @@ class TestChunkedStreamUpload:
         client.upload = mock.AsyncMock(return_value="standard-upload")
         return client
 
-    def test_empty_file_uses_standard_upload(self, load_script, tmp_path):
+    def test_empty_file_uses_standard_upload(self, load_script, tmp_path, monkeypatch):
         module = load_script(SCRIPT, config=base_config())
+        _install_fake_aiohttp(monkeypatch, payloads=[])
         empty = tmp_path / "empty.pptx"
         empty.write_bytes(b"")
         client = self._fake_client()
