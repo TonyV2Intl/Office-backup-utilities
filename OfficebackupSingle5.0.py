@@ -185,7 +185,7 @@ def request_access_token():   #定义获取access_token函数
             with open(config_file_path, 'w', encoding='utf-8') as f:   #将access_token写入配置文件
                 json.dump(config, f, indent=4, ensure_ascii=False)   #写入更新后的配置文件
             log_print('Access_token of 123Pan saved to json file successfully')   #打印保存access_token到配置文件成功的信息
-        except OSError as save_error:
+        except Exception as save_error:
             log_exception('Failed to save newly acquired 123Pan access_token; continuing with token in memory', save_error)
     except Exception as e:
         token_aquired=False   #标记token获取失败
@@ -208,7 +208,6 @@ if config.get('accurate_backup_enable'):  # 检查精确备份功能是否启用
         config['accurate_backup_enable'] = False   #强制禁用精确备份功能
         try:
             with open(config_file_path, 'w', encoding='utf-8') as f:   #将禁用精确备份功能写入配置文件
-                config['accurate_backup_enable'] = False   #强制禁用精确备份功能
                 json.dump(config, f, indent=4, ensure_ascii=False)   #写入更新后的配置文件
         except OSError as e:
             log_exception('Failed to save accurate backup disable setting', e)
@@ -445,6 +444,7 @@ def upload_to_123pan():   #定义上传函数
     for (upload_file, upload_source_path) in list(upload_queue):  #遍历队列快照，避免修改队列时跳过项目
         log_print('Start to upload ' + upload_file + ' to 123Pan')   #打印上传开始信息
         upload_start_time=datetime.datetime.now()   #记录上传操作开始时间
+        upload_succeeded = False   #记录当前文件是否上传成功
         try:
             try:
                 response = pan.file.list(parent_file_id=folder_id, search_data=upload_file, search_mode=1, limit=1)   #尝试在云盘内精确搜索文件，检查文件是否已经上传，限制返回1个结果
@@ -461,11 +461,13 @@ def upload_to_123pan():   #定义上传函数
             log_print('Upload to 123Pan successfully: ' + upload_file)
             if (upload_file, upload_source_path) in upload_queue:
                 upload_queue.remove((upload_file, upload_source_path))   #仅从上传成功的队列中移除文件
+            upload_succeeded = True   #标记当前文件上传成功
         except Exception as e:
             log_exception('Upload to 123Pan failed for ' + upload_file + '; file remains queued for retry', e)
         upload_end_time=datetime.datetime.now()   #记录上传操作结束时间
         upload_used_time=upload_end_time-upload_start_time   #计算上传所用时间
-        log_print('Upload to 123Pan finished: ' + upload_file + ' in ' + str(upload_used_time) + ' s')
+        if upload_succeeded:
+            log_print('Upload to 123Pan finished: ' + upload_file + ' in ' + str(upload_used_time) + ' s')
     if not upload_queue:
         log_print('Upload queue has been cleared')
 
