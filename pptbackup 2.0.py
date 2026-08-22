@@ -32,7 +32,8 @@ save_folder=r'C:\pptbackup' # 更改文件保存路径
 while True:
     try:
         save_open_ppt_files(save_folder)
-    except:
-        print('no ppt available now')
+    except KeyboardInterrupt:
+        raise
+    except Exception as e:
+        print('no ppt available now: ' + type(e).__name__ + ': ' + str(e))
     
-

@@ -96,5 +96,5 @@ while True:   #无限循环
             time.sleep(sleeptime)   #等待下次轮询
         else:   #打印出其他错误并继续轮询
             runid+=1   #运行计数器累加
-            print(time.strftime('[%H:%M:%S-#') + str(runid) + '] Exception: ' + type(e).__name__ + ', request continue')   #打印带时间戳和运行次数的异常信息
+            print(time.strftime('[%H:%M:%S-#') + str(runid) + '] Exception: ' + type(e).__name__ + ': ' + str(e) + ', request continue')   #打印带时间戳和运行次数的异常信息
             time.sleep(sleeptime)   #等待下次轮询

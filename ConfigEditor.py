@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox, filedialog
 import json
 import os
 import copy
+import sys
 
 class ConfigEditor:
     def __init__(self, root):
@@ -391,10 +392,11 @@ class ConfigEditor:
                 self.root.after(0, show_no_config)
                 return
         except Exception as e:
+            error_text = str(e)
             def show_load_error():
                 for widget in self.conn_test_results_frame.winfo_children():
                     widget.destroy()
-                ttk.Label(self.conn_test_results_frame, text=f"加载配置文件失败: {str(e)}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+                ttk.Label(self.conn_test_results_frame, text=f"加载配置文件失败: {error_text}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
                 elapsed_time = time.time() - start_time
                 ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
             self.root.after(0, show_load_error)
@@ -445,10 +447,11 @@ class ConfigEditor:
                         
                         self.root.after(0, show_success if response.status_code == 200 else show_failure)
                     except Exception as e:
+                        error_text = str(e)
                         def show_error():
                             for widget in self.conn_test_results_frame.winfo_children():
                                 widget.destroy()
-                            ttk.Label(self.conn_test_results_frame, text=f"123云盘: 连通性测试错误 - {str(e)}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+                            ttk.Label(self.conn_test_results_frame, text=f"123云盘: 连通性测试错误 - {error_text}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
                             elapsed_time = time.time() - start_time
                             ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
                         self.root.after(0, show_error)
@@ -561,8 +564,8 @@ class ConfigEditor:
                             # 删除本地临时文件
                             try:
                                 os_module.remove(test_file_path)
-                            except Exception:
-                                pass
+                            except Exception as cleanup_error:
+                                print("Failed to remove temporary connectivity test file " + test_file_path + ": " + type(cleanup_error).__name__ + ": " + str(cleanup_error), file=sys.stderr)
                             
                             return result_data
                         
@@ -588,12 +591,13 @@ class ConfigEditor:
                         threading.Thread(target=run_async_test, daemon=True).start()
                         
                     except Exception as e:
+                        error_text = str(e)
                         def show_openlist_error():
                             import traceback
                             traceback.print_exc()
                             for widget in self.conn_test_results_frame.winfo_children():
                                 widget.destroy()
-                            ttk.Label(self.conn_test_results_frame, text=f"OpenList: 连通性测试错误 - {str(e)}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+                            ttk.Label(self.conn_test_results_frame, text=f"OpenList: 连通性测试错误 - {error_text}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
                             elapsed_time = time.time() - start_time
                             ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
                         self.root.after(0, show_openlist_error)
