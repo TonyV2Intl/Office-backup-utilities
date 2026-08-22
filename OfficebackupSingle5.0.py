@@ -44,16 +44,21 @@ default_config = {
     "show_console_window_at_startup": False,   #程序启动时显示控制台窗口，True为显示，False为隐藏（默认）
     "save_log": True   #是否保存日志到latest.log文件，True为保存（默认），False为不保存
 }
+CONFIG_FILE = 'OfficebackupSingleConfig.json'   #配置文件名
+
+def write_config(config_to_write):   #将配置字典写入配置文件
+    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:   #以写入模式打开配置文件
+        json.dump(config_to_write, f, indent=4, ensure_ascii=False)   #写入配置内容
+
 try:   #读取配置文件
-    with open('OfficebackupSingleConfig.json', 'r', encoding='utf-8') as f:   #尝试读取配置文件（只读）
+    with open(CONFIG_FILE, 'r', encoding='utf-8') as f:   #尝试读取配置文件（只读）
         config = json.load(f)
     for key, value in default_config.items():   #如果现有配置文件有缺漏，根据默认配置项自动补全
         if key not in config:
             config[key] = value
 except (FileNotFoundError, json.JSONDecodeError):   #若配置文件不存在或无法解析
     config = default_config   #使用默认配置
-    with open('OfficebackupSingleConfig.json', 'w', encoding='utf-8') as f:   #在当前目录下根据默认配置文件创建（写入）
-        json.dump(config, f, indent=4, ensure_ascii=False)   #写入默认配置文件
+    write_config(config)   #在当前目录下根据默认配置文件创建（写入）
 
 
 
@@ -118,10 +123,9 @@ def request_access_token():   #定义获取access_token函数
 
         token_aquired=True   #标记token获取成功
 
-        with open('OfficebackupSingleConfig.json', 'w', encoding='utf-8') as f:   #将access_token写入配置文件
-            config['access_token'] = access_token   #更新配置字典中的access_token
-            json.dump(config, f, indent=4, ensure_ascii=False)   #写入更新后的配置文件
-            log_print('Access_token of 123Pan saved to json file successfully')   #打印保存access_token到配置文件成功的信息
+        config['access_token'] = access_token   #更新配置字典中的access_token
+        write_config(config)   #将access_token写入配置文件
+        log_print('Access_token of 123Pan saved to json file successfully')   #打印保存access_token到配置文件成功的信息
     except Exception as e:
         token_aquired=False   #标记token获取失败
         if config.get('access_token'):   #如果配置文件中已有access_token，则尝试使用该token
@@ -140,230 +144,129 @@ if config.get('accurate_backup_enable'):  # 检查精确备份功能是否启用
     target_path = config.get('accurate_backup_target_path')   #获取目标文件夹路径
     if not source_path and target_path:   #如果精确备份功能开启但源路径为空或目标路径为空，则强制禁用精确备份功能
         log_print("Source path or target path for accurate backup is empty, force disabled accurate backup function, please provide valid paths in the configuration file")
-        with open('OfficebackupSingleConfig.json', 'w', encoding='utf-8') as f:   #将禁用精确备份功能写入配置文件
-                config['accurate_backup_enable'] = False   #强制禁用精确备份功能
-                json.dump(config, f, indent=4, ensure_ascii=False)   #写入更新后的配置文件
+        config['accurate_backup_enable'] = False   #强制禁用精确备份功能
+        write_config(config)   #将禁用精确备份功能写入配置文件
 
 
+
+
+
+def _backup_open_files(save_folder, app_progid, use_get_object, collection_attr, file_type_label, app_label):   #通用备份函数，参数化不同Office应用的差异
+    global upload_queue  # 声明全局上传队列变量
+    file_collection = None   #初始化文档集合，便于异常处理时引用
+    try:
+        if not os.path.exists(save_folder):   #检查备份目录是否存在
+            os.makedirs(save_folder)   #若不存在则创建备份目录（包括所有必要的父目录）
+            log_print('Target backup folder not found, created: ' + save_folder + ' successfully')   #打印成功创建备份目录的信息
+
+        if use_get_object:   #判断是否使用GetObject方式获取COM对象（WPS用）
+            app = win32.GetObject(Class=app_progid)   #捕获当前打开的应用实例
+        else:   #使用Dispatch方式（PPT/Word用）
+            app = win32.Dispatch(app_progid)   #启动或连接到应用实例
+        file_collection = getattr(app, collection_attr)   #获取当前实例中所有打开的文档集合
+
+        any_backup_performed = False   #标记本轮是否有任何备份操作
+
+        for target_file in file_collection:   #遍历集合
+            target_file_path = target_file.FullName   #获取文件的完整路径
+            target_file_name = os.path.basename(target_file_path)   #提取文件名
+            backup_file_path = os.path.join(save_folder, target_file_name)   #生成备份路径
+
+            if os.path.exists(backup_file_path):   #检查备份文件是否已存在
+                if SaveAs_method_activated[target_file_name] == True:   #如果SaveAs方法已被激活，则不再使用复制方法
+                    log_print(target_file_name + ' has already existed in ' + save_folder + ', skipped backup (SaveAs method activated)')   #打印跳过信息
+                    continue   #跳过此次备份
+                if file_skip_count[target_file_name] < max_skipping_time and Existed_in_this_session[target_file_name] == True:  # 仅当同一文件连续跳过规定次数，且在本次会话中出现过时才允许重新备份
+                    file_skip_count[target_file_name] += 1   #该文件的跳过计数器累加
+                    if file_skip_count[target_file_name] == max_skipping_time:   # 如果跳过次数达到规定次数，打印提示信息
+                        log_print(target_file_name + ' has already existed in ' + save_folder + ', skipped backup (skipped times: ' + str(file_skip_count[target_file_name]) + ', this file will be backed up again during the next request)')   #打印跳过信息
+                    else:
+                        log_print(target_file_name + ' has already existed in ' + save_folder + ', skipped backup (skipped times: ' + str(file_skip_count[target_file_name]) + ')')   #打印跳过信息
+                    continue   #跳过此次备份
+
+            Existed_in_this_session[target_file_name] = True   #标记该文件在本次会话中出现过
+            log_print('Start to backup ' + target_file_name + ' to ' + save_folder)   #打印备份开始信息
+            copy_start_time=datetime.datetime.now()   #记录复制操作开始时间
+            shutil.copy2(target_file_path, backup_file_path)   #复制文件到备份文件夹，并尝试保留元数据（如修改时间等）
+            copy_end_time=datetime.datetime.now()   #记录复制操作结束时间
+            copy_used_time=copy_end_time-copy_start_time  #计算复制所用时间
+
+            modified_time=os.path.getmtime(backup_file_path)   #获取备份文件的修改时间
+            current_time=time.time()   #获取当前时间
+            os.utime(backup_file_path, (modified_time, current_time))   #将 修改时间 存储到 访问时间（参数1），将 当前系统时间 设为 修改时间（参数2），方便文件系统根据修改时间排序
+
+            file_skip_count[target_file_name] = 0   #重置该文件的跳过计数器
+            any_backup_performed = True   #标记本轮有备份操作
+            log_print('Successfully backuped ' + target_file_name + ' to ' + save_folder + ' in ' + str(copy_used_time) + ' s')   #打印备份成功信息
+
+            upload_queue.append((target_file_name, backup_file_path))  # 将文件名和备份路径添加到上传队列
+
+        if not any_backup_performed and len(file_collection) == 0:   #检查变量值，如果没有可备份文件，打印此条信息
+            log_print('No ' + file_type_label + ' available now (Normal request)')   #打印运行信息
+
+    except FileNotFoundError:   #捕获由于U盘等移动存储介质被移除而导致的“文件未找到”异常，使用2.0版本中的SaveAs方法进行备份
+        if not os.path.exists(save_folder):   #检查备份目录是否存在
+            os.makedirs(save_folder)   #若不存在则创建备份目录（包括所有必要的父目录）
+            log_print('Target backup folder not found, created: ' + save_folder + ' successfully')   #打印成功创建备份目录的信息
+
+        if file_collection is None:   #文档集合尚未获取，无法使用SaveAs方法
+            return   #跳过本次备份
+
+        for idx in range(1, file_collection.Count + 1):   #遍历文档实例集合
+            target_file = file_collection.Item(idx)   #获取当前文档实例
+            target_file_path = target_file.FullName   #获取文件的完整路径
+            target_file_name = os.path.basename(target_file_path)   #提取文件名
+            backup_file_path = os.path.join(save_folder, target_file_name)   #生成备份路径
+            log_print('Start to backup ' + target_file_name + ' to ' + save_folder)   #打印备份开始信息
+            save_start_time=datetime.datetime.now()   #记录保存操作开始时间
+            target_file.SaveAs(backup_file_path)   #使用SaveAs方法保存当前文档实例到指定路径
+            save_end_time=datetime.datetime.now()   #记录保存操作结束时间
+            save_used_time=save_end_time-save_start_time  #计算保存所用时间
+            SaveAs_method_activated[target_file_name] = True   #标记该文件已激活SaveAs方法，后续不再备份
+            log_print('Detected access control, activated SaveAs method, successfully backuped ' + target_file_name + ' to ' + save_folder + ' in ' + str(save_used_time) + ' s')   #打印备份成功信息
+
+            upload_queue.append((target_file_name, backup_file_path))  # 将文件名和备份路径添加到上传队列
+    except Exception as e:   #获取其他错误类型
+        if type(e).__name__=='com_error':   #捕获无打开的应用实例而产生的的异常
+            log_print('No ' + file_type_label + ' available now (' + app_label + ' application not detected)')   #打印异常信息
+        else:   #打印出其他错误并继续轮询
+            log_print('Exception: ' + type(e).__name__ + ', request continue')   #打印异常信息
 
 
 
 def save_open_ppt_files(ppt_save_folder):   #定义ppt保存函数，参数ppt_save_folder是备份文件的存储路径
-    global upload_queue  # 声明全局上传队列变量
-    try:
-        if not os.path.exists(ppt_save_folder):   #检查ppt备份目录是否存在
-            os.makedirs(ppt_save_folder)   #若不存在则创建备份目录（包括所有必要的父目录）
-            log_print('Target backup folder not found, created: ' + ppt_save_folder + ' successfully')   #打印成功创建ppt备份目录的信息
-        
-        ppt_app=win32.Dispatch('PowerPoint.Application')   #启动一个PowerPoint实例
-        presentations = ppt_app.Presentations   #获取当前PowerPoint实例中所有打开的演示文稿集合
-
-        any_backup_performed = False   #标记本轮是否有任何备份操作（替代原haveppt）
-        
-        for ppt in presentations:   #遍历集合
-            ppt_path = ppt.FullName   #获取PPT文件的完整路径
-            ppt_name = os.path.basename(ppt_path)   #提取文件名
-            new_ppt_path = os.path.join(ppt_save_folder, ppt_name)   #生成备份路径
-
-            if os.path.exists(new_ppt_path):   #检查备份文件是否已存在
-                if SaveAs_method_activated[ppt_name] == True:   #如果SaveAs方法已被激活，则不再使用复制方法
-                    log_print(ppt_name + ' has already existed in ' + ppt_save_folder + ', skipped backup (SaveAs method activated)')   #打印跳过信息
-                    continue   #跳过此次备份
-                if file_skip_count[ppt_name] < max_skipping_time and Existed_in_this_session[ppt_name] == True:  # 仅当同一文件连续跳过规定次数，且在本次会话中出现过时才允许重新备份
-                    file_skip_count[ppt_name] += 1   #该文件的跳过计数器累加
-                    if file_skip_count[ppt_name] == max_skipping_time:   # 如果跳过次数达到规定次数，打印提示信息
-                        log_print(ppt_name + ' has already existed in ' + ppt_save_folder + ', skipped backup (skipped times: ' + str(file_skip_count[ppt_name]) + ', this file will be backed up again during the next request)')   #打印跳过信息
-                    else:
-                        log_print(ppt_name + ' has already existed in ' + ppt_save_folder + ', skipped backup (skipped times: ' + str(file_skip_count[ppt_name]) + ')')   #打印跳过信息
-                    continue   #跳过此次备份
-            
-            Existed_in_this_session[ppt_name] = True   #标记该文件在本次会话中出现过
-            log_print('Start to backup ' + ppt_name + ' to ' + ppt_save_folder)   #打印备份开始信息
-            copy_start_time=datetime.datetime.now()   #记录复制操作开始时间
-            shutil.copy2(ppt_path, new_ppt_path)   #复制PPT到备份文件夹，并尝试保留元数据（如修改时间等）
-            copy_end_time=datetime.datetime.now()   #记录复制操作结束时间
-            copy_used_time=copy_end_time-copy_start_time  #计算复制所用时间
-
-            modified_time=os.path.getmtime(new_ppt_path)   #获取备份文件的修改时间
-            current_time=time.time()   #获取当前时间
-            os.utime(new_ppt_path, (modified_time, current_time))   #将 修改时间 存储到 访问时间（参数1），将 当前系统时间 设为 修改时间（参数2），方便文件系统根据修改时间排序
-
-            file_skip_count[ppt_name] = 0   #重置该文件的跳过计数器
-            any_backup_performed = True   #标记本轮有备份操作
-            log_print(f'Successfully backuped {ppt_name} to {ppt_save_folder} in {copy_used_time} s')   #打印备份成功信息
-
-            upload_queue.append((ppt_name,new_ppt_path))  # 将文件名和备份路径添加到上传队列
-
-        if not any_backup_performed and len(presentations) == 0:   #检查变量值，如果没有可备份PPT，打印此条信息
-            log_print('No ppt available now (Normal request)')   #打印运行信息
-
-    except FileNotFoundError:   #捕获由于U盘等移动存储介质被移除而导致的“文件未找到”异常，使用2.0版本中的SaveAs方法进行备份
-        if not os.path.exists(ppt_save_folder):   #检查ppt备份目录是否存在
-            os.makedirs(ppt_save_folder)   #若不存在则创建备份目录（包括所有必要的父目录）
-            log_print('Target backup folder not found, created: ' + ppt_save_folder + ' successfully')   #打印成功创建ppt备份目录的信息
-
-        for idx in range(1, presentations.Count + 1):   #遍历PPT实例集合
-            ppt = presentations.Item(idx)   #获取当前PPT实例
-            log_print('Start to backup ' + ppt_name + ' to ' + ppt_save_folder)   #打印备份开始信息
-            savestarttime=datetime.datetime.now()   #记录保存操作开始时间
-            ppt.SaveAs(new_ppt_path)   #使用SaveAs方法保存当前PPT实例到指定路径
-            saveendtime=datetime.datetime.now()   #记录保存操作结束时间
-            saveusedtime=saveendtime-savestarttime  #计算保存所用时间
-            SaveAs_method_activated[ppt_name] = True   #标记该文件已激活SaveAs方法，后续不再备份
-            log_print('Detected access control, activated SaveAs method, successfully backuped ' + ppt_name + ' to ' + ppt_save_folder + ' in ' + str(saveusedtime) + ' s')   #打印备份成功信息
-
-            upload_queue.append((ppt_name,new_ppt_path))  # 将文件名和备份路径添加到上传队列       
-    except Exception as e:   #获取其他错误类型
-            if type(e).__name__=='com_error':   #捕获无打开的PowerPoint实例而产生的的异常
-                log_print('No ppt available now (PowerPoint application not detected)')   #打印异常信息
-            else:   #打印出其他错误并继续轮询
-                log_print('Exception: ' + type(e).__name__ + ', request continue')   #打印异常信息
+    _backup_open_files(
+        save_folder=ppt_save_folder,   #备份保存路径
+        app_progid='PowerPoint.Application',   #PowerPoint应用程序ID
+        use_get_object=False,   #使用Dispatch方式获取COM对象
+        collection_attr='Presentations',   #演示文稿集合属性名
+        file_type_label='ppt',   #文件类型标签
+        app_label='PowerPoint'   #应用名称（用于日志）
+    )
 
 
 
 def save_open_word_files(word_save_folder):   #定义word保存函数，参数word_save_folder是备份文件的存储路径
-    global upload_queue  # 声明全局上传队列变量
-    try:
-        if not os.path.exists(word_save_folder):   #检查word备份目录是否存在
-            os.makedirs(word_save_folder)   #若不存在则创建备份目录（包括所有必要的父目录）
-            log_print('Target backup folder not found, created: ' + word_save_folder + ' successfully')   #打印成功创建word备份目录的信息
-        
-        word_app = win32.Dispatch('Word.Application')   #启动一个Word实例，若启用独立实例则无法获取当前已经打开的Word实例信息
-        documents = word_app.Documents   #获取当前Word实例中所有打开的文档集合
-
-        any_backup_performed = False   #标记本轮是否有任何备份操作（替代原havedoc）
-            
-        for doc in documents:   #遍历集合
-            doc_path = doc.FullName   #获取Word文件的完整路径
-            doc_name = os.path.basename(doc_path)   #提取文件名
-            new_doc_path = os.path.join(word_save_folder, doc_name)   #生成备份路径
-
-            if os.path.exists(new_doc_path):   #检查备份文件是否已存在
-                if SaveAs_method_activated[doc_name] == True:   #如果SaveAs方法已被激活，则不再使用复制方法
-                    log_print(doc_name + ' has already existed in ' + word_save_folder + ', skipped backup (SaveAs method activated)')   #打印跳过信息
-                    continue   #跳过此次备份
-                if file_skip_count[doc_name] < max_skipping_time and Existed_in_this_session[doc_name] == True:  # 仅当同一文件连续跳过规定次数，且在本次会话中出现过时才允许重新备份
-                    file_skip_count[doc_name] += 1   #该文件的跳过计数器累加
-                    if file_skip_count[doc_name] == max_skipping_time:   # 如果跳过次数达到规定次数，打印提示信息
-                        log_print(doc_name + ' has already existed in ' + word_save_folder + ', skipped backup (skipped times: ' + str(file_skip_count[doc_name]) + ', this file will be backed up again during the next request)')   #打印跳过信息
-                    else:
-                        log_print(doc_name + ' has already existed in ' + word_save_folder + ', skipped backup (skipped times: ' + str(file_skip_count[doc_name]) + ')')   #打印跳过信息
-                    continue   #跳过此次备份
-
-            Existed_in_this_session[doc_name] = True   #标记该文件在本次会话中出现过
-            log_print('Start to backup ' + doc_name + ' to ' + word_save_folder)   #打印备份开始信息
-            copy_start_time=datetime.datetime.now()   #记录复制操作开始时间
-            shutil.copy2(doc_path, new_doc_path)   #复制文档到备份文件夹，并尝试保留元数据（如修改时间等）
-            copy_end_time=datetime.datetime.now()   #记录复制操作结束时间
-            copy_used_time=copy_end_time-copy_start_time  #计算复制所用时间
-
-            modified_time=os.path.getmtime(new_doc_path)   #获取备份文件的修改时间
-            current_time=time.time()   #获取当前时间
-            os.utime(new_doc_path, (modified_time, current_time))   #将修改时间存储到访问时间（参数1），创建时间存储到修改时间（参数2），方便文件系统根据修改时间排序
-
-            file_skip_count[doc_name] = 0   #重置该文件的跳过计数器
-            any_backup_performed = True   #标记本轮有备份操作
-            log_print('Successfully backuped ' + doc_name + ' to ' + word_save_folder + ' in ' + str(copy_used_time) +' s')   #打印备份成功信息
-
-            upload_queue.append((doc_name,new_doc_path))  # 将文件名和备份路径添加到上传队列
-
-        if not any_backup_performed and len(documents) == 0:   #检查变量值，如果没有可备份PPT，打印此条信息
-                log_print('No doc available now')
-
-    except FileNotFoundError:   #捕获由于U盘等移动存储介质被移除而导致的“文件未找到”异常，使用2.0版本中的SaveAs方法进行备份
-        if not os.path.exists(word_save_folder):   #检查word备份目录是否存在
-            os.makedirs(word_save_folder)   #若不存在则创建备份目录（包括所有必要的父目录）
-            log_print('Target backup folder not found, created: ' + word_save_folder + ' successfully')   #打印成功创建word备份目录的信息
-    
-        for idx in range(1, documents.Count + 1):   #遍历文档实例集合
-            doc = documents.Item(idx)   #获取当前文档实例
-            log_print('Start to backup ' + doc_name + ' to ' + word_save_folder)   #打印备份开始信息
-            save_start_time=datetime.datetime.now()   #记录保存操作开始时间
-            doc.SaveAs(new_doc_path)   #使用SaveAs方法保存当前文档实例到指定路径
-            save_end_time=datetime.datetime.now()   #记录保存操作结束时间
-            save_used_time=save_end_time-save_start_time  #计算保存所用时间
-            SaveAs_method_activated[doc_name] = True   #标记该文件已激活SaveAs方法，后续不再备份
-            log_print('Detected access control, activated SaveAs method, successfully backuped ' + doc_name + ' to ' + word_save_folder + ' in ' + str(save_used_time) + ' s')   #打印备份成功信息
-
-            upload_queue.append((doc_name,new_doc_path))  # 将文件名和备份路径添加到上传队列
-    except Exception as e:   #获取其他错误类型
-            if type(e).__name__=='com_error':   #捕获无打开的PowerPoint实例而产生的的异常
-                log_print('No doc available now (Word application not detected)')   #打印带时间戳和运行次数的异常信息
-            else:   #打印出其他错误并继续轮询
-                log_print('Exception: ' + type(e).__name__ + ', request continue')   #打印带时间戳和运行次数的异常信息
+    _backup_open_files(
+        save_folder=word_save_folder,   #备份保存路径
+        app_progid='Word.Application',   #Word应用程序ID
+        use_get_object=False,   #使用Dispatch方式获取COM对象
+        collection_attr='Documents',   #文档集合属性名
+        file_type_label='doc',   #文件类型标签
+        app_label='Word'   #应用名称（用于日志）
+    )
 
 
 
 def save_open_WPS_files(ppt_save_folder):   #定义WPS保存函数，参数ppt_save_folder是备份文件的存储路径
-    global upload_queue  # 声明全局上传队列变量
-    try:
-        if not os.path.exists(ppt_save_folder):   #检查ppt备份目录是否存在
-            os.makedirs(ppt_save_folder)   #若不存在则创建备份目录（包括所有必要的父目录）
-            log_print('Target backup folder not found, created: ' + ppt_save_folder + ' successfully')   #打印成功创建ppt备份目录的信息
-        
-        WPS_app=win32.GetObject(Class='KWPP.Application')   #捕获当前打开的WPS演示实例
-        WPSpresentations = WPS_app.Presentations   #获取当前WPS实例中所有打开的演示文稿集合
-
-        any_backup_performed = False   #标记本轮是否有任何备份操作（替代原haveppt）
-        
-        for ppt in WPSpresentations:   #遍历集合
-            WPS_ppt_path = ppt.FullName   #获取PPT文件的完整路径
-            WPS_ppt_name = os.path.basename(WPS_ppt_path)   #提取文件名
-            WPS_new_ppt_path = os.path.join(ppt_save_folder, WPS_ppt_name)   #生成备份路径
-
-            if os.path.exists(WPS_new_ppt_path):   #检查备份文件是否已存在
-                if SaveAs_method_activated[WPS_ppt_name] == True:   #如果SaveAs方法已被激活，则不再使用复制方法
-                    log_print(WPS_ppt_name + ' has already existed in ' + ppt_save_folder + ', skipped backup (SaveAs method activated)')   #打印带时间戳和运行次数的跳过信息
-                    continue   #跳过此次备份
-                if file_skip_count[WPS_ppt_name] < max_skipping_time and Existed_in_this_session[WPS_ppt_name] == True:  # 仅当同一文件连续跳过规定次数，且在本次会话中出现过时才允许重新备份
-                    file_skip_count[WPS_ppt_name] += 1   #该文件的跳过计数器累加
-                    if file_skip_count[WPS_ppt_name] == max_skipping_time:   # 如果跳过次数达到规定次数，打印提示信息
-                        log_print(WPS_ppt_name + ' has already existed in ' + ppt_save_folder + ', skipped backup (skipped times: ' + str(file_skip_count[WPS_ppt_name]) + ', this file will be backed up again during the next request)')   #打印带时间戳和运行次数的跳过信息
-                    else:
-                        log_print(WPS_ppt_name + ' has already existed in ' + ppt_save_folder + ', skipped backup (skipped times: ' + str(file_skip_count[WPS_ppt_name]) + ')')   #打印带时间戳和运行次数的跳过信息
-                    continue   #跳过此次备份
-
-            Existed_in_this_session[WPS_ppt_name] = True   #标记该文件在本次会话中出现过
-            log_print('Start to backup ' + WPS_ppt_name + ' to ' + ppt_save_folder)   #打印备份开始信息
-            copystarttime=datetime.datetime.now()   #记录复制操作开始时间
-            shutil.copy2(WPS_ppt_path, WPS_new_ppt_path)   #复制PPT到备份文件夹，并尝试保留元数据（如修改时间等）
-            copyendtime=datetime.datetime.now()   #记录复制操作结束时间
-            copyusedtime=copyendtime-copystarttime  #计算复制所用时间
-
-            modified_time=os.path.getmtime(WPS_new_ppt_path)   #获取备份文件的修改时间
-            create_time=os.path.getctime(WPS_new_ppt_path)   #获取备份文件的创建时间
-            os.utime(WPS_new_ppt_path, (modified_time, create_time))   #将修改时间存储到访问时间（参数1），创建时间存储到修改时间（参数2），方便文件系统根据修改时间排序
-
-            file_skip_count[WPS_ppt_name] = 0   #重置该文件的跳过计数器
-            any_backup_performed = True   #标记本轮有备份操作
-            log_print('Successfully backuped ' + WPS_ppt_name + ' to ' + ppt_save_folder + ' in ' + str(copyusedtime) +' s')   #打印带时间戳和运行次数的备份成功信息
-
-            upload_queue.append((WPS_ppt_name,WPS_new_ppt_path))  # 将文件名和备份路径添加到上传队列
-
-        if not any_backup_performed and len(WPSpresentations) == 0:   #检查变量值，如果没有可备份PPT，打印此条信息
-            log_print('No WPS ppt available now (Normal request)')   #打印带时间戳和运行次数的运行信息
-
-    except FileNotFoundError:   #捕获由于U盘等移动存储介质被移除而导致的“文件未找到”异常，使用2.0版本中的SaveAs方法进行备份
-        if not os.path.exists(ppt_save_folder):   #检查ppt备份目录是否存在
-            os.makedirs(ppt_save_folder)   #若不存在则创建备份目录（包括所有必要的父目录）
-            log_print('Target backup folder not found, created: ' + ppt_save_folder + ' successfully')   #打印成功创建ppt备份目录的信息
-        
-        for idx in range(1, WPSpresentations.Count + 1):   #遍历PPT实例集合
-            ppt = WPSpresentations.Item(idx)   #获取当前PPT实例
-            log_print('Start to backup ' + WPS_ppt_name + ' to ' + ppt_save_folder)   #打印备份开始信息
-            savestarttime=datetime.datetime.now()   #记录保存操作开始时间
-            ppt.SaveAs(WPS_new_ppt_path)   #使用SaveAs方法保存当前PPT实例到指定路径
-            saveendtime=datetime.datetime.now()   #记录保存操作结束时间
-            saveusedtime=saveendtime-savestarttime  #计算保存所用时间
-            SaveAs_method_activated[WPS_ppt_name] = True   #标记该文件已激活SaveAs方法，后续不再备份
-            log_print('Detected access control, activated SaveAs method, successfully backuped ' + WPS_ppt_name + ' to ' + ppt_save_folder + ' in ' + str(saveusedtime) + ' s')   #打印备份成功信息
-
-            upload_queue.append((WPS_ppt_name,WPS_new_ppt_path))  # 将文件名和备份路径添加到上传队列  
-    except Exception as e:   #获取其他错误类型
-            if type(e).__name__=='com_error':   #捕获无打开的WPS实例而产生的的异常
-                log_print('No ppt available now (WPS application not detected)')   #打印异常信息
-            else:   #打印出其他错误并继续轮询
-                log_print('Exception: ' + type(e).__name__ + ', request continue')   #打印异常信息
+    _backup_open_files(
+        save_folder=ppt_save_folder,   #备份保存路径
+        app_progid='KWPP.Application',   #WPS演示应用程序ID
+        use_get_object=True,   #使用GetObject方式获取COM对象
+        collection_attr='Presentations',   #演示文稿集合属性名
+        file_type_label='WPS ppt',   #文件类型标签
+        app_label='WPS'   #应用名称（用于日志）
+    )
 
 
 

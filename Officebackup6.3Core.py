@@ -36,8 +36,14 @@ default_config = {
     #超时设置
     "backup_timeout": 600,   #备份操作超时时间，单位为秒（默认10分钟）
 }
+CONFIG_FILE = 'OBU6.3Core.json'   #配置文件名
+
+def write_config(config_to_write):   #将配置字典写入配置文件
+    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:   #以写入模式打开配置文件
+        json.dump(config_to_write, f, indent=4, ensure_ascii=False)   #写入配置内容
+
 try:   #读取配置文件
-    with open('OBU6.3Core.json', 'r', encoding='utf-8') as f:   #尝试读取配置文件（只读）
+    with open(CONFIG_FILE, 'r', encoding='utf-8') as f:   #尝试读取配置文件（只读）
         config = json.load(f)
     config_changed = False
     for key, value in default_config.items():   #如果现有配置文件有缺漏，根据默认配置项自动补全
@@ -45,12 +51,10 @@ try:   #读取配置文件
             config[key] = value
             config_changed = True
     if config_changed:   #如果配置文件有新增项，写回配置文件
-        with open('OBU6.3Core.json', 'w', encoding='utf-8') as f:
-            json.dump(config, f, indent=4, ensure_ascii=False)
+        write_config(config)
 except (FileNotFoundError, json.JSONDecodeError):   #若配置文件不存在或无法解析
     config = default_config   #使用默认配置
-    with open('OBU6.3Core.json', 'w', encoding='utf-8') as f:   #在当前目录下根据默认配置文件创建（写入）
-        json.dump(config, f, indent=4, ensure_ascii=False)   #写入默认配置文件
+    write_config(config)   #在当前目录下根据默认配置文件创建（写入）
 
 
 
@@ -343,8 +347,7 @@ def accurate_backup():   #定义精确备份函数
             
             config['accurate_backup_enable'] = False   #当前会话禁用精确备份功能
             try:
-                with open('OBU6.3Core.json', 'w', encoding='utf-8') as f:
-                    json.dump(config, f, indent=4, ensure_ascii=False)
+                write_config(config)   #写回配置
                 log_print('Accurate backup disabled after successful backup')
             except Exception as e:
                 log_print('Failed to update config file: ' + str(e))

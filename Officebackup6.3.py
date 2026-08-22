@@ -55,8 +55,14 @@ default_config = {
     "upload_retry_wait": 30,   #上传重试等待时间，单位为秒（默认30秒）
     "upload_max_retries": ""   #上传最大重试次数，默认为空，表示无限次重试
 }
+CONFIG_FILE = 'OBU6.3.json'   #配置文件名
+
+def write_config(config_to_write):   #将配置字典写入配置文件
+    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:   #以写入模式打开配置文件
+        json.dump(config_to_write, f, indent=4, ensure_ascii=False)   #写入配置内容
+
 try:   #读取配置文件
-    with open('OBU6.3.json', 'r', encoding='utf-8') as f:   #尝试读取配置文件（只读）
+    with open(CONFIG_FILE, 'r', encoding='utf-8') as f:   #尝试读取配置文件（只读）
         config = json.load(f)   #加载JSON配置内容
     config_changed = False   #标记配置是否有变更
     for key, value in default_config.items():   #如果现有配置文件有缺漏，根据默认配置项自动补全
@@ -64,12 +70,10 @@ try:   #读取配置文件
             config[key] = value   #添加缺失的配置项
             config_changed = True   #标记配置已变更
     if config_changed:   #如果配置文件有新增项，写回配置文件
-        with open('OBU6.3.json', 'w', encoding='utf-8') as f:   #以写入模式打开配置文件
-            json.dump(config, f, indent=4, ensure_ascii=False)   #写回更新后的配置
+        write_config(config)   #写回更新后的配置
 except (FileNotFoundError, json.JSONDecodeError):   #若配置文件不存在或无法解析
     config = default_config   #使用默认配置
-    with open('OBU6.3.json', 'w', encoding='utf-8') as f:   #在当前目录下根据默认配置文件创建（写入）
-        json.dump(config, f, indent=4, ensure_ascii=False)   #写入默认配置文件
+    write_config(config)   #在当前目录下根据默认配置文件创建（写入）
 
 
 
@@ -97,6 +101,12 @@ def log_print(msg, source='main'):   #定义日志打印函数
     if config.get('save_log'):   #如果启用日志保存功能，则将日志消息写入日志文件
         log_file.write(log_msg + '\n')   # 将日志消息写入日志文件
         log_file.flush()   #刷新文件缓冲区，确保日志消息立即写入文件
+
+def log_abnormal_upload(file_name, error_str):   #将上传异常的文件记录到OBUabnormal.txt
+    if not config.get('log_abnormal_upload'):   #检查是否启用异常记录
+        return   #未启用则直接返回
+    with open('OBUabnormal.txt', 'a', encoding='utf-8') as f:   #打开异常日志文件
+        f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {file_name} - {error_str}\n")   #写入异常信息
 
 
 
@@ -180,6 +190,26 @@ if config.get('upload_to_openlist_enable'):   #只有启用上传功能时才进
     if not openlist_target_folder or openlist_target_folder == '':   #如果目标文件夹为空
         openlist_target_folder = '/'   #默认为根目录
 
+
+
+def build_openlist_target_path(file_name):   #拼接OpenList远端目标文件路径
+    if openlist_target_folder == '/':   #如果目标文件夹是根目录
+        return '/' + file_name   #直接拼接文件名
+    return openlist_target_folder + '/' + file_name   #否则拼接目标文件夹路径
+
+async def openlist_login():   #创建异步AList客户端并登录，成功返回客户端对象，失败返回None
+    user = AListUser(openlist_username, openlist_password)   #创建AList用户对象
+    client = AListAsync(openlist_url)   #创建异步AList客户端
+    if await client.login(user):   #异步执行登录
+        return client   #登录成功返回客户端
+    return None   #登录失败返回None
+
+async def validate_openlist_target_folder(client):   #通过mkdir测试目标文件夹是否有效，有效返回None，否则返回错误信息
+    try:
+        await client.mkdir(openlist_target_folder)   #尝试创建目标文件夹（已存在则不报错）
+        return None   #路径有效
+    except Exception as e:   #创建失败，说明路径无效
+        return str(e)   #返回错误信息
 
 
 #OpenList_Chunk分块上传的块大小（字节），设置为90MB以绕过Cloudflare免费版100MB的上传大小限制
@@ -269,41 +299,28 @@ def upload_to_openlist_thread():   #在单独线程中执行上传操作
             try:
                 # 定义异步上传函数
                 async def async_upload():
-                    # 初始化AList客户端和用户（使用异步API）
-                    user = AListUser(openlist_username, openlist_password)   #创建AList用户对象
-                    client = AListAsync(openlist_url)   #创建异步AList客户端
                     upload_result = False   #初始化上传结果标志
                     
                     # 构造目标文件路径
-                    if openlist_target_folder == '/':   #如果目标文件夹是根目录
-                        target_file_path = '/' + upload_file   #直接拼接文件名
-                    else:   #否则拼接目标文件夹路径
-                        target_file_path = openlist_target_folder + '/' + upload_file
+                    target_file_path = build_openlist_target_path(upload_file)   #拼接远端目标文件路径
                     
                     # 登录
-                    login_result = await client.login(user)   #异步执行登录
-                    if login_result:   #登录成功
+                    client = await openlist_login()   #创建异步AList客户端并登录
+                    if client:   #登录成功
                         log_print('Login to OpenList successfully', source='openlist')   #记录日志
                     else:   #登录失败
-                        error_str = 'Login failed'   #构建错误信息
                         log_print('Login to OpenList failed', source='openlist')   #记录日志
-                        if config.get('log_abnormal_upload'):   #检查是否启用异常记录
-                            with open('OBUabnormal.txt', 'a', encoding='utf-8') as f:   #打开异常日志文件
-                                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {upload_file} - {error_str}\n")   #写入异常信息
+                        log_abnormal_upload(upload_file, 'Login failed')   #记录异常文件
                         return False   #返回失败
                     
                     # 检查目标文件夹是否有效（使用mkdir测试）
-                    try:
-                        await client.mkdir(openlist_target_folder)   #尝试创建目标文件夹（已存在则不报错）
+                    folder_error = await validate_openlist_target_folder(client)   #验证目标文件夹路径
+                    if folder_error is None:   #路径有效
                         log_print('Target folder validated: ' + openlist_target_folder, source='openlist')   #记录验证成功
-                    except Exception as e:   #创建失败，说明路径无效
-                        # 说明路径无效，当前会话禁用上传功能
-                        error_str = 'Target folder invalid: ' + str(e)   #构建错误信息
-                        log_print('Target folder invalid: ' + openlist_target_folder + ', error: ' + str(e), source='openlist')   #记录错误
+                    else:   #路径无效，当前会话禁用上传功能
+                        log_print('Target folder invalid: ' + openlist_target_folder + ', error: ' + folder_error, source='openlist')   #记录错误
                         log_print('Upload function disabled for this session, please check target folder path  is valid in the configuration file', source='openlist')   #提示用户检查配置
-                        if config.get('log_abnormal_upload'):   #检查是否启用异常记录
-                            with open('OBUabnormal.txt', 'a', encoding='utf-8') as f:   #打开异常日志文件
-                                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {upload_file} - {error_str}\n")   #写入异常信息
+                        log_abnormal_upload(upload_file, 'Target folder invalid: ' + folder_error)   #记录异常文件
                         config['upload_to_openlist_enable'] = False   #当前会话禁用上传功能（不修改配置文件）
                         return False   #返回失败
                     
@@ -329,9 +346,7 @@ def upload_to_openlist_thread():   #在单独线程中执行上传操作
                         else:   #上传返回False
                             error_str = 'Upload returned False'   #构建错误信息
                             log_print('Upload to OpenList failed: ' + error_str, source='openlist')   #记录失败日志
-                            if config.get('log_abnormal_upload'):   #检查是否启用异常记录
-                                with open('OBUabnormal.txt', 'a', encoding='utf-8') as f:   #打开异常日志文件
-                                    f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {upload_file} - {error_str}\n")   #写入异常信息
+                            log_abnormal_upload(upload_file, error_str)   #记录异常文件
                     except Exception as e:   #捕获上传异常
                         error_str = str(e)   #获取异常信息
                         log_print('Upload failed: ' + error_str, source='openlist')   #记录失败日志
@@ -342,9 +357,7 @@ def upload_to_openlist_thread():   #在单独线程中执行上传操作
                                 log_print('Removed conflicting upload session', source='openlist')   #记录冲突解决
                             except:   #删除失败则忽略
                                 pass
-                        if config.get('log_abnormal_upload'):   #检查是否启用异常记录
-                            with open('OBUabnormal.txt', 'a', encoding='utf-8') as f:   #打开异常日志文件
-                                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {upload_file} - {error_str}\n")   #写入异常信息
+                        log_abnormal_upload(upload_file, error_str)   #记录异常文件
                     
                     return upload_result   #返回上传结果
                 
@@ -372,10 +385,7 @@ def upload_to_openlist_thread():   #在单独线程中执行上传操作
                 error_str = str(e)   #获取异常信息
                 log_print('Upload to OpenList failed: ' + error_str, source='openlist')   #记录失败日志
                 log_print('Traceback: ' + traceback.format_exc(), source='openlist')   #记录完整堆栈信息
-                # 记录异常文件到OBUabnormal.txt
-                if config.get('log_abnormal_upload'):   #检查是否启用异常记录
-                    with open('OBUabnormal.txt', 'a', encoding='utf-8') as f:   #打开异常日志文件
-                        f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {upload_file} - {error_str}\n")   #写入异常信息
+                log_abnormal_upload(upload_file, error_str)   #记录异常文件到OBUabnormal.txt
                 # 发生错误时，保留文件在队列中，等待下次上传
                 upload_end_time=datetime.datetime.now()   #记录上传操作结束时间
                 upload_used_time=upload_end_time-upload_start_time   #计算上传所用时间
@@ -426,7 +436,6 @@ def test_openlist_connection():   #测试OpenList连接（登录+目标文件夹
         return False   #返回失败
     
     try:
-        from alist import AListUser, AListAsync   #导入AList3SDK
         import asyncio   #导入asyncio模块
         
         async def async_fetch_remote_files(client):   #异步获取远端文件列表（直接调用API避免alist3库在空文件夹时抛出NoneType异常）
@@ -471,20 +480,17 @@ def test_openlist_connection():   #测试OpenList连接（登录+目标文件夹
             return True   #返回成功
         
         async def async_test():   #异步测试连接函数
-            user = AListUser(openlist_username, openlist_password)   #创建AList用户对象
-            client = AListAsync(openlist_url)   #创建异步AList客户端
-            
-            login_result = await client.login(user)   #异步执行登录
-            if not login_result:   #登录失败
+            client = await openlist_login()   #创建异步AList客户端并登录
+            if not client:   #登录失败
                 log_print('OpenList login failed, please check username and password', source='openlist')   #记录登录失败
                 return False   #返回失败
             log_print('OpenList login successful', source='openlist')   #记录登录成功
             
-            try:
-                await client.mkdir(openlist_target_folder)   #尝试创建目标文件夹（验证路径有效性）
+            folder_error = await validate_openlist_target_folder(client)   #验证目标文件夹路径有效性
+            if folder_error is None:   #路径有效
                 log_print('OpenList target folder validated: ' + openlist_target_folder, source='openlist')   #记录验证成功
-            except Exception as e:   #创建失败，路径无效
-                log_print('OpenList target folder invalid: ' + openlist_target_folder + ', error: ' + str(e), source='openlist')   #记录路径无效
+            else:   #路径无效
+                log_print('OpenList target folder invalid: ' + openlist_target_folder + ', error: ' + folder_error, source='openlist')   #记录路径无效
                 return False   #返回失败
             
             await async_fetch_remote_files(client)   #获取远端文件列表
@@ -822,8 +828,7 @@ def accurate_backup():   #定义精确备份函数
             
             config['accurate_backup_enable'] = False   #当前会话禁用精确备份功能
             try:
-                with open('OBU6.3.json', 'w', encoding='utf-8') as f:   #打开配置文件
-                    json.dump(config, f, indent=4, ensure_ascii=False)   #写回配置
+                write_config(config)   #写回配置
                 log_print('Accurate backup disabled after successful backup')   #记录禁用信息
             except Exception as e:   #写入失败
                 log_print('Failed to update config file: ' + str(e))   #记录错误

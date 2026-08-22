@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox, filedialog
 import json
 import os
 import copy
+import time
 
 class ConfigEditor:
     def __init__(self, root):
@@ -269,91 +270,70 @@ class ConfigEditor:
         self.conn_test_results_frame = ttk.Frame(conn_test_frame)
         self.conn_test_results_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
     
+    def show_com_test_status(self, text, color):
+        """在COM测试结果区显示一条带颜色的状态信息"""
+        ttk.Label(self.com_test_results_frame, text=text, foreground=color).pack(anchor=tk.W, padx=5, pady=2)
+    
+    def test_com_app(self, label, progid, collection_attr, use_get_object=False, check_visible=True, error_prefix="错误"):
+        """测试单个Office/WPS应用的COM接口并显示已打开的文件列表"""
+        try:
+            import win32com.client
+            if use_get_object:
+                app = win32com.client.GetObject(Class=progid)   #WPS等只能通过GetObject获取已运行的实例
+            else:
+                app = win32com.client.Dispatch(progid)
+            if check_visible and not app.Visible:
+                # 未打开，显示红色
+                self.show_com_test_status(f"{label}: 未打开", "red")
+                return
+            collection = getattr(app, collection_attr)   #获取文档/演示文稿集合
+            if collection.Count > 0:
+                # 找到文件，显示绿色
+                app_frame = ttk.LabelFrame(self.com_test_results_frame, text=f"{label}: 已打开")
+                app_frame.pack(fill=tk.X, padx=5, pady=2)
+                for i in range(1, collection.Count + 1):
+                    ttk.Label(app_frame, text=f"  - {collection(i).Name}", foreground="green").pack(anchor=tk.W, padx=10, pady=1)
+            else:
+                # 已打开但无文件，显示绿色
+                self.show_com_test_status(f"{label}: 已打开，但无文件", "green")
+        except Exception as e:
+            # 错误，显示红色
+            self.show_com_test_status(f"{label}: {error_prefix} - {str(e)}", "red")
+    
     def test_com_interfaces(self):
         """测试 COM 接口"""
         # 记录开始时间
-        import time
         start_time = time.time()
         
         # 清空结果显示
         for widget in self.com_test_results_frame.winfo_children():
             widget.destroy()
         
-        # 测试 PowerPoint
-        try:
-            import win32com.client
-            powerpoint = win32com.client.Dispatch("PowerPoint.Application")
-            if powerpoint.Visible:
-                presentations = powerpoint.Presentations
-                if presentations.Count > 0:
-                    # 找到文件，显示绿色
-                    ppt_frame = ttk.LabelFrame(self.com_test_results_frame, text="PowerPoint: 已打开")
-                    ppt_frame.pack(fill=tk.X, padx=5, pady=2)
-                    for i in range(1, presentations.Count + 1):
-                        presentation = presentations(i)
-                        ttk.Label(ppt_frame, text=f"  - {presentation.Name}", foreground="green").pack(anchor=tk.W, padx=10, pady=1)
-                else:
-                    # 已打开但无文件，显示绿色
-                    ttk.Label(self.com_test_results_frame, text="PowerPoint: 已打开，但无文件", foreground="green").pack(anchor=tk.W, padx=5, pady=2)
-            else:
-                # 未打开，显示红色
-                ttk.Label(self.com_test_results_frame, text="PowerPoint: 未打开", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
-        except Exception as e:
-            # 错误，显示红色
-            ttk.Label(self.com_test_results_frame, text=f"PowerPoint: 错误 - {str(e)}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+        self.test_com_app("PowerPoint", "PowerPoint.Application", "Presentations")   #测试 PowerPoint
+        self.test_com_app("Word", "Word.Application", "Documents")   #测试 Word
+        self.test_com_app("WPS", "KWPP.Application", "Presentations", use_get_object=True, check_visible=False, error_prefix="未打开或错误")   #测试 WPS
         
-        # 测试 Word
-        try:
-            import win32com.client
-            word = win32com.client.Dispatch("Word.Application")
-            if word.Visible:
-                documents = word.Documents
-                if documents.Count > 0:
-                    # 找到文件，显示绿色
-                    word_frame = ttk.LabelFrame(self.com_test_results_frame, text="Word: 已打开")
-                    word_frame.pack(fill=tk.X, padx=5, pady=2)
-                    for i in range(1, documents.Count + 1):
-                        document = documents(i)
-                        ttk.Label(word_frame, text=f"  - {document.Name}", foreground="green").pack(anchor=tk.W, padx=10, pady=1)
-                else:
-                    # 已打开但无文件，显示绿色
-                    ttk.Label(self.com_test_results_frame, text="Word: 已打开，但无文件", foreground="green").pack(anchor=tk.W, padx=5, pady=2)
-            else:
-                # 未打开，显示红色
-                ttk.Label(self.com_test_results_frame, text="Word: 未打开", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
-        except Exception as e:
-            # 错误，显示红色
-            ttk.Label(self.com_test_results_frame, text=f"Word: 错误 - {str(e)}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
-        
-        # 测试 WPS
-        try:
-            import win32com.client
-            wps = win32com.client.GetObject(Class="KWPP.Application")
-            presentations = wps.Presentations
-            if presentations.Count > 0:
-                # 找到文件，显示绿色
-                wps_frame = ttk.LabelFrame(self.com_test_results_frame, text="WPS: 已打开")
-                wps_frame.pack(fill=tk.X, padx=5, pady=2)
-                for i in range(1, presentations.Count + 1):
-                    presentation = presentations(i)
-                    ttk.Label(wps_frame, text=f"  - {presentation.Name}", foreground="green").pack(anchor=tk.W, padx=10, pady=1)
-            else:
-                # 已打开但无文件，显示绿色
-                ttk.Label(self.com_test_results_frame, text="WPS: 已打开，但无文件", foreground="green").pack(anchor=tk.W, padx=5, pady=2)
-        except Exception as e:
-            # 未打开或错误，显示红色
-            ttk.Label(self.com_test_results_frame, text=f"WPS: 未打开或错误 - {str(e)}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
-        
-        # 计算测试用时
-        end_time = time.time()
-        elapsed_time = end_time - start_time
-        # 显示测试用时
+        # 计算并显示测试用时
+        elapsed_time = time.time() - start_time
         ttk.Label(self.com_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
+    
+    def show_conn_test_elapsed(self, start_time):
+        """在连通性测试结果区显示测试用时"""
+        elapsed_time = time.time() - start_time
+        ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
+    
+    def show_conn_test_error(self, message, start_time):
+        """在主线程清空连通性测试结果区，显示红色错误信息和测试用时"""
+        def render():
+            for widget in self.conn_test_results_frame.winfo_children():
+                widget.destroy()
+            ttk.Label(self.conn_test_results_frame, text=message, foreground="red").pack(anchor=tk.W, padx=5, pady=2)
+            self.show_conn_test_elapsed(start_time)
+        self.root.after(0, render)
     
     def test_cloud_connection(self):
         """测试云盘连通性"""
         import threading
-        import time
         start_time = time.time()
         
         # 清空结果显示
@@ -366,13 +346,7 @@ class ConfigEditor:
         # 获取当前选择的版本
         version = self.test_version_var.get()
         if not version:
-            def show_no_version():
-                for widget in self.conn_test_results_frame.winfo_children():
-                    widget.destroy()
-                ttk.Label(self.conn_test_results_frame, text="请先选择版本", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
-                elapsed_time = time.time() - start_time
-                ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
-            self.root.after(0, show_no_version)
+            self.show_conn_test_error("请先选择版本", start_time)
             return
         
         # 加载配置文件
@@ -382,22 +356,10 @@ class ConfigEditor:
                 with open(config_file, 'r', encoding='utf-8') as f:
                     config = json.load(f)
             else:
-                def show_no_config():
-                    for widget in self.conn_test_results_frame.winfo_children():
-                        widget.destroy()
-                    ttk.Label(self.conn_test_results_frame, text=f"配置文件 {config_file} 不存在", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
-                    elapsed_time = time.time() - start_time
-                    ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
-                self.root.after(0, show_no_config)
+                self.show_conn_test_error(f"配置文件 {config_file} 不存在", start_time)
                 return
         except Exception as e:
-            def show_load_error():
-                for widget in self.conn_test_results_frame.winfo_children():
-                    widget.destroy()
-                ttk.Label(self.conn_test_results_frame, text=f"加载配置文件失败: {str(e)}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
-                elapsed_time = time.time() - start_time
-                ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
-            self.root.after(0, show_load_error)
+            self.show_conn_test_error(f"加载配置文件失败: {str(e)}", start_time)
             return
         
         # 在后台线程中执行测试
@@ -410,13 +372,7 @@ class ConfigEditor:
                 access_token = config.get("access_token")
                 
                 if not client_id or not client_secret or not access_token:
-                    def show_incomplete_params():
-                        for widget in self.conn_test_results_frame.winfo_children():
-                            widget.destroy()
-                        ttk.Label(self.conn_test_results_frame, text="123云盘参数不完整", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
-                        elapsed_time = time.time() - start_time
-                        ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
-                    self.root.after(0, show_incomplete_params)
+                    self.show_conn_test_error("123云盘参数不完整", start_time)
                 else:
                     # 测试 123 云盘连通性
                     try:
@@ -433,25 +389,14 @@ class ConfigEditor:
                             ttk.Label(result_frame, text=f"  Client ID: {client_id}").pack(anchor=tk.W, padx=10, pady=1)
                             ttk.Label(result_frame, text=f"  测试状态: 成功").pack(anchor=tk.W, padx=10, pady=1)
                             ttk.Label(result_frame, text=f"  响应状态码: {response.status_code}").pack(anchor=tk.W, padx=10, pady=1)
-                            elapsed_time = time.time() - start_time
-                            ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
+                            self.show_conn_test_elapsed(start_time)
                         
-                        def show_failure():
-                            for widget in self.conn_test_results_frame.winfo_children():
-                                widget.destroy()
-                            ttk.Label(self.conn_test_results_frame, text=f"123云盘: 连通性测试失败 - {response.status_code}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
-                            elapsed_time = time.time() - start_time
-                            ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
-                        
-                        self.root.after(0, show_success if response.status_code == 200 else show_failure)
+                        if response.status_code == 200:
+                            self.root.after(0, show_success)
+                        else:
+                            self.show_conn_test_error(f"123云盘: 连通性测试失败 - {response.status_code}", start_time)
                     except Exception as e:
-                        def show_error():
-                            for widget in self.conn_test_results_frame.winfo_children():
-                                widget.destroy()
-                            ttk.Label(self.conn_test_results_frame, text=f"123云盘: 连通性测试错误 - {str(e)}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
-                            elapsed_time = time.time() - start_time
-                            ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
-                        self.root.after(0, show_error)
+                        self.show_conn_test_error(f"123云盘: 连通性测试错误 - {str(e)}", start_time)
             
             # 测试 OpenList (版本 6.3)
             elif version == "6.3":
@@ -469,13 +414,7 @@ class ConfigEditor:
                     openlist_target_folder = '/'
                 
                 if not openlist_url or not openlist_username:
-                    def show_incomplete_params():
-                        for widget in self.conn_test_results_frame.winfo_children():
-                            widget.destroy()
-                        ttk.Label(self.conn_test_results_frame, text="OpenList参数不完整", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
-                        elapsed_time = time.time() - start_time
-                        ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
-                    self.root.after(0, show_incomplete_params)
+                    self.show_conn_test_error("OpenList参数不完整", start_time)
                 else:
                     # 测试 OpenList 连通性
                     try:
@@ -521,8 +460,7 @@ class ConfigEditor:
                                     ttk.Label(result_frame, text=f"  上传测试: 失败", foreground="red").pack(anchor=tk.W, padx=10, pady=1)
                             
                             # 添加测试用时
-                            elapsed_time = time.time() - start_time
-                            ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
+                            self.show_conn_test_elapsed(start_time)
                         
                         # 异步测试函数
                         async def test_upload_and_delete(client):
@@ -588,15 +526,9 @@ class ConfigEditor:
                         threading.Thread(target=run_async_test, daemon=True).start()
                         
                     except Exception as e:
-                        def show_openlist_error():
-                            import traceback
-                            traceback.print_exc()
-                            for widget in self.conn_test_results_frame.winfo_children():
-                                widget.destroy()
-                            ttk.Label(self.conn_test_results_frame, text=f"OpenList: 连通性测试错误 - {str(e)}", foreground="red").pack(anchor=tk.W, padx=5, pady=2)
-                            elapsed_time = time.time() - start_time
-                            ttk.Label(self.conn_test_results_frame, text=f"测试用时: {elapsed_time:.3f} 秒").pack(anchor=tk.W, padx=5, pady=5)
-                        self.root.after(0, show_openlist_error)
+                        import traceback
+                        traceback.print_exc()
+                        self.show_conn_test_error(f"OpenList: 连通性测试错误 - {str(e)}", start_time)
         
         # 启动后台线程
         thread = threading.Thread(target=run_test_in_thread, daemon=True)
@@ -1059,41 +991,32 @@ class ConfigEditor:
             "6.3Core": "Officebackup6.3Core"
         }
         
-        if version in program_files:
-            base_name = program_files[version]
-            # 优先尝试启动 py 文件
-            py_file = f"{base_name}.py"
-            if os.path.exists(py_file):
-                # 启动 py 文件
-                try:
-                    import subprocess
-                    subprocess.Popen(["python", py_file])
-                    self.status_var.set(f"已启动{version}版本程序")
-                    messagebox.showinfo("成功", f"已启动{version}版本程序")
-                    return
-                except Exception as e:
-                    messagebox.showerror("错误", f"启动程序失败: {str(e)}")
-                    self.status_var.set("启动程序失败")
-                    return
-            
-            # 如果 py 文件不存在，尝试启动 exe 文件
-            exe_file = f"{base_name}.exe"
-            if os.path.exists(exe_file):
-                # 启动 exe 文件
-                try:
-                    import subprocess
-                    subprocess.Popen([exe_file])
-                    self.status_var.set(f"已启动{version}版本程序")
-                    messagebox.showinfo("成功", f"已启动{version}版本程序")
-                except Exception as e:
-                    messagebox.showerror("错误", f"启动程序失败: {str(e)}")
-                    self.status_var.set("启动程序失败")
-            else:
-                messagebox.showerror("错误", f"程序文件不存在: {py_file} 或 {exe_file}")
-                self.status_var.set("程序文件不存在")
-        else:
+        if version not in program_files:
             messagebox.showerror("错误", "无效的版本")
             self.status_var.set("无效的版本")
+            return
+        
+        base_name = program_files[version]
+        py_file = f"{base_name}.py"
+        exe_file = f"{base_name}.exe"
+        # 优先尝试启动 py 文件，py 文件不存在时启动 exe 文件
+        if os.path.exists(py_file):
+            command = ["python", py_file]
+        elif os.path.exists(exe_file):
+            command = [exe_file]
+        else:
+            messagebox.showerror("错误", f"程序文件不存在: {py_file} 或 {exe_file}")
+            self.status_var.set("程序文件不存在")
+            return
+        
+        try:
+            import subprocess
+            subprocess.Popen(command)
+            self.status_var.set(f"已启动{version}版本程序")
+            messagebox.showinfo("成功", f"已启动{version}版本程序")
+        except Exception as e:
+            messagebox.showerror("错误", f"启动程序失败: {str(e)}")
+            self.status_var.set("启动程序失败")
     
     def on_exit(self):
         self.root.destroy()
