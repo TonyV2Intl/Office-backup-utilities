@@ -307,7 +307,10 @@ def record_abnormal_upload(upload_file, error_str):   #记录上传异常文件�
             with open('OBUabnormal.txt', 'a', encoding='utf-8') as f:   #打开异常日志文件
                 f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {upload_file} - {error_str}\n")   #写入异常信息
         except Exception as e:
-            log_exception('Failed to write OBUabnormal.txt for ' + upload_file, e, source='openlist')
+            try:
+                log_exception('Failed to write OBUabnormal.txt for ' + upload_file, e, source='openlist')
+            except Exception as log_error:
+                print('[ERROR] Failed to record abnormal upload log failure: ' + type(log_error).__name__ + ': ' + str(log_error), file=sys.stderr)
 
 
 def _upload_to_openlist_thread_impl():   #执行OpenList上传操作
@@ -994,13 +997,16 @@ menu = (item('Show/Hide console window', toggle_console), item('Exit program', e
 
 icon = pystray.Icon("office_backup_utilities", image, "Office Backup Utilities", menu)   #创建托盘图标对象
 '''icon.on_left_click = on_clicked   #绑定左键单击事件处理函数（无法生效）'''
-
+# 全局异常处理函数
 def global_exception_handler(exctype, value, tb):   #处理全局未捕获异常
     if issubclass(exctype, KeyboardInterrupt):   #正常响应Ctrl+C
         sys.__excepthook__(exctype, value, tb)
         return
+    # 构建完整的错误信息，包括 Traceback (most recent call last):
     error_msg = "".join(traceback.format_exception(exctype, value, tb))   #格式化异常信息
+    # 打印到控制台
     print(f"[ERROR] {error_msg}")   #输出到控制台
+    # 写入日志文件
     try:
         log_print('[ERROR] ' + error_msg)   #安全地写入日志文件或控制台
     except Exception as log_error:
