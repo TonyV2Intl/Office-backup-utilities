@@ -116,7 +116,7 @@ if config.get('save_log'):   #检查是否启用日志保存功能
         print(header + '\n')   #打印到控制台
         log_file.write(header + '\n\n')   #写入日志文件
         log_file.flush()   #刷新文件缓冲区，确保日志消息立即写入文件
-    except (OSError, IOError) as e:
+    except OSError as e:
         startup_warnings.append('Failed to initialize file logging: ' + type(e).__name__ + ': ' + str(e) + '; continuing with console-only logging')
         config['save_log'] = False   #仅在内存中禁用文件日志
         log_file = None   #确保后续日志不会使用失败的句柄
@@ -131,7 +131,7 @@ def log_print(msg, source='main'):   #定义日志打印函数
         try:
             log_file.write(log_msg + '\n')   # 将日志消息写入日志文件
             log_file.flush()   #刷新文件缓冲区，确保日志消息立即写入文件
-        except (OSError, IOError, ValueError) as e:
+        except (OSError, ValueError) as e:
             file_logging_enabled = False   #写入失败后禁用本次会话的文件日志
             config['save_log'] = False   #仅在内存中禁用文件日志
             if not log_write_error_reported:
@@ -762,6 +762,7 @@ def remove_readonly(file_path):   #移除文件只读属性
 
 def _backup_open_files(save_folder, app_progid, use_get_object, collection_attr, file_type_label):   #通用备份函数，参数化不同Office应用的差异
     global upload_queue   #声明全局上传队列变量
+    file_collection = None   #初始化文档集合，便于判断获取集合是否失败
     try:   #开始异常捕获
         if not os.path.exists(save_folder):   #检查备份目录是否存在
             os.makedirs(save_folder)   #若不存在则创建备份目录（包括所有必要的父目录）
@@ -784,14 +785,17 @@ def _backup_open_files(save_folder, app_progid, use_get_object, collection_attr,
                 if SaveAs_method_activated[target_file_name] == True:   #如果SaveAs方法已被激活
                     log_print(target_file_name + ' has already existed in ' + save_folder + ', skipped backup (SaveAs method activated)')   #打印跳过信息
                     return False   #跳过此次备份
+
                 original_md5 = calculate_md5(target_file_path)   #计算源文件的MD5值
                 backup_md5 = calculate_md5(backup_file_path)   #计算备份文件的MD5值
+
                 if original_md5 and backup_md5 and original_md5 == backup_md5:   #两个MD5都成功计算且相同
                     if not Existed_in_this_session[target_file_name]:   #本次会话中首次出现该文件
                         Existed_in_this_session[target_file_name] = True   #标记为已出现过
                         current_time = time.time()   #获取当前时间
                         os.utime(backup_file_path, (os.path.getatime(backup_file_path), current_time))   #更新修改时间为当前时间
                         log_print(target_file_name + ' first appeared in this session, updated modification time')   #打印时间更新日志
+
                     if config.get('upload_to_openlist_enable'):   #检查是否启用了OpenList上传
                         log_print(target_file_name + ' has already existed in ' + save_folder + ', checking OpenList')   #打印检查OpenList信息
                         if not check_file_exists_on_openlist(target_file_name):   #检查文件是否存在于远端
@@ -817,10 +821,13 @@ def _backup_open_files(save_folder, app_progid, use_get_object, collection_attr,
             shutil.copy2(target_file_path, backup_file_path)   #复制文件到备份文件夹，保留元数据
             copy_end_time = datetime.datetime.now()   #记录复制操作结束时间
             copy_used_time = copy_end_time - copy_start_time   #计算复制所用时间
+
             current_time = time.time()   #获取当前时间
             os.utime(backup_file_path, (os.path.getatime(backup_file_path), current_time))   #设置修改时间为备份发生的时间
+
             file_skip_count[target_file_name] = 0   #重置该文件的跳过计数器
             log_print('Successfully backuped ' + target_file_name + ' to ' + save_folder + ' in ' + str(copy_used_time) + ' s')   #打印备份成功信息
+
             if config.get('upload_to_openlist_enable'):   #检查是否启用了OpenList上传
                 if add_to_upload_queue(target_file_name, backup_file_path):   #原子性添加到上传队列
                     log_print(target_file_name + ' not found on OpenList, adding to upload queue')   #打印添加上传队列日志
@@ -832,6 +839,8 @@ def _backup_open_files(save_folder, app_progid, use_get_object, collection_attr,
             try:
                 if backup_one_file(target_file):   #处理当前文档
                     any_backup_performed = True   #标记本轮有备份操作
+            except FileNotFoundError:
+                raise
             except Exception as e:
                 try:
                     failed_file_name = target_file.FullName
@@ -844,7 +853,7 @@ def _backup_open_files(save_folder, app_progid, use_get_object, collection_attr,
             log_print('No ' + file_type_label + ' available now (Normal request)')   #打印无文件信息
 
     except FileNotFoundError as e:   #捕获移动存储介质移除导致的文件未找到异常，使用SaveAs方法备份
-        if 'file_collection' not in locals():   #如果获取文档集合前就失败
+        if file_collection is None:   #如果获取文档集合前就失败
             log_exception('File not found before opening ' + file_type_label + ' document collection', e)
             return   #无法使用SaveAs方式继续
         try:
@@ -1033,18 +1042,20 @@ if not config.get('hide_tray_icon'):   #检查是否隐藏托盘图标
 sys.excepthook = global_exception_handler   #注册全局异常处理器
 
 
-print('Program initialization completed, entering main loop\n')   #打印初始化完成信息
 log_print('Program initialization completed, entering main loop')   #记录初始化完成信息
 
 while True:   #主线程无限循环，防止程序退出
-    if config.get('ppt_backup_enable'):   #检查PPT备份功能是否启用
-        save_open_ppt_files(ppt_save_folder)   #执行PPT备份
-    if config.get('word_backup_enable'):   #检查Word备份功能是否启用
-        save_open_word_files(word_save_folder)   #执行Word备份
-    if config.get('wps_backup_enable'):   #检查WPS备份功能是否启用
-        save_open_WPS_files(ppt_save_folder)   #执行WPS备份
-    if config.get('accurate_backup_enable') and not accurate_backup_running:  # 检查精确备份功能是否启用且未在运行
-        backup_thread = threading.Thread(target=accurate_backup)   #创建精确备份线程
-        backup_thread.daemon = True   #设置为守护线程
-        backup_thread.start()   #启动精确备份线程
+    try:
+        if config.get('ppt_backup_enable'):   #检查PPT备份功能是否启用
+            save_open_ppt_files(ppt_save_folder)   #执行PPT备份
+        if config.get('word_backup_enable'):   #检查Word备份功能是否启用
+            save_open_word_files(word_save_folder)   #执行Word备份
+        if config.get('wps_backup_enable'):   #检查WPS备份功能是否启用
+            save_open_WPS_files(ppt_save_folder)   #执行WPS备份
+        if config.get('accurate_backup_enable') and not accurate_backup_running:  # 检查精确备份功能是否启用且未在运行
+            backup_thread = threading.Thread(target=accurate_backup)   #创建精确备份线程
+            backup_thread.daemon = True   #设置为守护线程
+            backup_thread.start()   #启动精确备份线程
+    except Exception as e:
+        log_exception('Main loop iteration failed', e)
     time.sleep(sleeptime)   #等待指定时间后继续轮询

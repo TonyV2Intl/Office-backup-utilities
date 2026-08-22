@@ -96,7 +96,7 @@ if config.get('save_log'):   #检查是否启用日志保存功能
             os.remove('latest.log')
         log_file = open('latest.log', 'a', encoding='utf-8')   #以追加模式打开日志文件
         file_logging_enabled = True   #标记文件日志已启用
-    except (OSError, IOError) as e:
+    except OSError as e:
         startup_warnings.append('Failed to initialize file logging: ' + type(e).__name__ + ': ' + str(e) + '; continuing with console-only logging')
         config['save_log'] = False   #仅在内存中禁用文件日志
 def log_print(msg):   #定义日志打印函数
@@ -108,7 +108,7 @@ def log_print(msg):   #定义日志打印函数
         try:
             log_file.write(log_msg + '\n')   # 将日志消息写入日志文件
             log_file.flush()   #刷新文件缓冲区，确保日志消息立即写入文件
-        except (OSError, IOError, ValueError) as e:
+        except (OSError, ValueError) as e:
             file_logging_enabled = False
             config['save_log'] = False
             if not log_write_error_reported:

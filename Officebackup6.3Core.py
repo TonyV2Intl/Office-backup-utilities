@@ -98,7 +98,7 @@ if config.get('save_log'):   #检查是否启用日志保存功能
         print(header + '\n')
         log_file.write(header + '\n\n')
         log_file.flush()   #刷新文件缓冲区，确保日志消息立即写入文件
-    except (OSError, IOError) as e:
+    except OSError as e:
         startup_warnings.append('Failed to initialize file logging: ' + type(e).__name__ + ': ' + str(e) + '; continuing with console-only logging')
         config['save_log'] = False   #仅在内存中禁用文件日志
         log_file = None
@@ -113,7 +113,7 @@ def log_print(msg):   #定义日志打印函数
         try:
             log_file.write(log_msg + '\n')   # 将日志消息写入日志文件
             log_file.flush()   #刷新文件缓冲区，确保日志消息立即写入文件
-        except (OSError, IOError, ValueError) as e:
+        except (OSError, ValueError) as e:
             file_logging_enabled = False   #写入失败后禁用本次会话的文件日志
             config['save_log'] = False   #仅在内存中禁用文件日志
             if not log_write_error_reported:
@@ -266,6 +266,7 @@ def remove_readonly(file_path):
         log_exception('Error removing readonly from ' + file_path, e)
 
 def _backup_open_files(save_folder, app_progid, use_get_object, collection_attr, file_type_label):   #通用备份函数，参数化不同Office应用的差异
+    file_collection = None   #初始化文档集合，便于判断获取集合是否失败
     try:   #开始异常捕获
         if not os.path.exists(save_folder):   #检查备份目录是否存在
             os.makedirs(save_folder)   #若不存在则创建备份目录（包括所有必要的父目录）
@@ -316,6 +317,8 @@ def _backup_open_files(save_folder, app_progid, use_get_object, collection_attr,
                 file_skip_count[target_file_name] = 0   #重置该文件的跳过计数器
                 any_backup_performed = True   #标记本轮有备份操作
                 log_print('Successfully backuped ' + target_file_name + ' to ' + save_folder + ' in ' + str(copy_used_time) + ' s')   #打印备份成功信息
+            except FileNotFoundError:
+                raise
             except Exception as e:
                 try:
                     failed_file_name = target_file.FullName
@@ -327,7 +330,7 @@ def _backup_open_files(save_folder, app_progid, use_get_object, collection_attr,
             log_print('No ' + file_type_label + ' available now (Normal request)')   #打印无文件信息
 
     except FileNotFoundError as e:   #捕获移动存储介质移除导致的文件未找到异常，使用SaveAs方法备份
-        if 'file_collection' not in locals():   #如果获取文档集合前就失败
+        if file_collection is None:   #如果获取文档集合前就失败
             log_exception('File not found before opening ' + file_type_label + ' document collection', e)
             return   #无法使用SaveAs方式继续
         if not os.path.exists(save_folder):   #检查备份目录是否存在
@@ -462,18 +465,20 @@ def threading_exception_handler(args):   #处理守护线程未捕获异常
 sys.excepthook = global_exception_handler   #注册主线程异常处理器
 threading.excepthook = threading_exception_handler   #注册守护线程异常处理器
 
-print('Program initialization completed, entering main loop\n')
 log_print('Program initialization completed, entering main loop')
 
 while True:   #主线程无限循环，防止程序退出
-    if config.get('ppt_backup_enable'):   #检查PPT备份功能是否启用
-        save_open_ppt_files(ppt_save_folder)   #启动线程
-    if config.get('word_backup_enable'):   #检查Word备份功能是否启用
-        save_open_word_files(word_save_folder)   #启动线程
-    if config.get('wps_backup_enable'):   #检查WPS备份功能是否启用
-        save_open_WPS_files(ppt_save_folder)   #启动线程
-    if config.get('accurate_backup_enable') and not accurate_backup_running:  # 检查精确备份功能是否启用且未在运行
-        backup_thread = threading.Thread(target=accurate_backup)
-        backup_thread.daemon = True
-        backup_thread.start()
+    try:
+        if config.get('ppt_backup_enable'):   #检查PPT备份功能是否启用
+            save_open_ppt_files(ppt_save_folder)   #启动线程
+        if config.get('word_backup_enable'):   #检查Word备份功能是否启用
+            save_open_word_files(word_save_folder)   #启动线程
+        if config.get('wps_backup_enable'):   #检查WPS备份功能是否启用
+            save_open_WPS_files(ppt_save_folder)   #启动线程
+        if config.get('accurate_backup_enable') and not accurate_backup_running:  # 检查精确备份功能是否启用且未在运行
+            backup_thread = threading.Thread(target=accurate_backup)
+            backup_thread.daemon = True
+            backup_thread.start()
+    except Exception as e:
+        log_exception('Main loop iteration failed', e)
     time.sleep(sleeptime)   #等待指定时间后继续轮询
