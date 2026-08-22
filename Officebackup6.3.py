@@ -55,48 +55,88 @@ default_config = {
     "upload_retry_wait": 30,   #上传重试等待时间，单位为秒（默认30秒）
     "upload_max_retries": ""   #上传最大重试次数，默认为空，表示无限次重试
 }
+startup_warnings = []   #初始化启动警告列表，日志系统准备好后再输出
+config_file_path = 'OBU6.3.json'   #配置文件路径
 try:   #读取配置文件
     with open('OBU6.3.json', 'r', encoding='utf-8') as f:   #尝试读取配置文件（只读）
         config = json.load(f)   #加载JSON配置内容
+    if not isinstance(config, dict):   #检查配置内容是否为JSON对象
+        raise TypeError('configuration root must be a JSON object')
     config_changed = False   #标记配置是否有变更
     for key, value in default_config.items():   #如果现有配置文件有缺漏，根据默认配置项自动补全
         if key not in config:   #检查配置项是否存在
             config[key] = value   #添加缺失的配置项
             config_changed = True   #标记配置已变更
     if config_changed:   #如果配置文件有新增项，写回配置文件
-        with open('OBU6.3.json', 'w', encoding='utf-8') as f:   #以写入模式打开配置文件
-            json.dump(config, f, indent=4, ensure_ascii=False)   #写回更新后的配置
-except (FileNotFoundError, json.JSONDecodeError):   #若配置文件不存在或无法解析
-    config = default_config   #使用默认配置
-    with open('OBU6.3.json', 'w', encoding='utf-8') as f:   #在当前目录下根据默认配置文件创建（写入）
-        json.dump(config, f, indent=4, ensure_ascii=False)   #写入默认配置文件
+        try:
+            with open(config_file_path, 'w', encoding='utf-8') as f:   #以写入模式打开配置文件
+                json.dump(config, f, indent=4, ensure_ascii=False)   #写回更新后的配置
+        except OSError as e:
+            startup_warnings.append('Failed to update configuration file ' + config_file_path + ': ' + str(e))
+except FileNotFoundError:   #若配置文件不存在，使用默认配置并尝试创建
+    config = default_config.copy()   #使用默认配置
+    try:
+        with open(config_file_path, 'w', encoding='utf-8') as f:   #在当前目录下根据默认配置文件创建
+            json.dump(config, f, indent=4, ensure_ascii=False)   #写入默认配置文件
+    except OSError as e:
+        startup_warnings.append('Failed to create default configuration file ' + config_file_path + ': ' + str(e))
+except (json.JSONDecodeError, UnicodeDecodeError, OSError, TypeError) as e:   #配置损坏、不可读取或格式不正确
+    config = default_config.copy()   #使用默认配置，但保留损坏文件
+    backup_path = config_file_path + '.' + datetime.datetime.now().strftime('%Y%m%d%H%M%S') + '.bak'
+    try:
+        os.rename(config_file_path, backup_path)   #将损坏配置文件重命名为备份
+        startup_warnings.append('Configuration file ' + config_file_path + ' is invalid (' + type(e).__name__ + ': ' + str(e) + '); preserved as ' + backup_path)
+    except OSError as backup_error:
+        startup_warnings.append('Configuration file ' + config_file_path + ' is invalid (' + type(e).__name__ + ': ' + str(e) + '); failed to preserve backup (' + str(backup_error) + ')')
+    try:
+        with open(config_file_path, 'w', encoding='utf-8') as f:   #尝试写入默认配置文件
+            json.dump(config, f, indent=4, ensure_ascii=False)   #写入默认配置
+    except OSError as write_error:
+        startup_warnings.append('Failed to create replacement configuration file ' + config_file_path + ': ' + str(write_error))
 
 
 
+log_file = None   #初始化日志文件句柄，日志打开失败时保持为空
+file_logging_enabled = False   #标记本次会话是否启用文件日志
+log_write_error_reported = False   #标记是否已经报告过日志写入失败
 if config.get('save_log'):   #检查是否启用日志保存功能
-    if os.path.exists('OBUlatest.log'):   #如果日志文件存在
-        if config.get('archive_previous_log'):   #如果启用归档功能
-            # 将旧日志重命名为OBUprevious.log
-            if os.path.exists('OBUprevious.log'):   #检查旧归档日志是否存在
-                os.remove('OBUprevious.log')   #删除旧归档日志
-            os.rename('OBUlatest.log', 'OBUprevious.log')   #重命名当前日志为归档日志
-        else:   #如果禁用归档功能，直接删除旧日志
-            os.remove('OBUlatest.log')   #删除旧日志文件
-    log_file = open('OBUlatest.log', 'a', encoding='utf-8')   #以追加模式打开日志文件
-    # 写入版权信息和开始运行时间戳到控制台和日志文件
-    header = 'Office Backup Utilities 6.3\nCopyright (C) 2024-2026 TonyV2Intl\nSession starts at: ' + time.strftime('%Y-%m-%d %H:%M:%S')   #构建日志头信息
-    print(header + '\n')   #打印到控制台
-    log_file.write(header + '\n\n')   #写入日志文件
-    log_file.flush()   #刷新文件缓冲区，确保日志消息立即写入文件
+    try:
+        if os.path.exists('OBUlatest.log'):   #如果日志文件存在
+            if config.get('archive_previous_log'):   #如果启用归档功能
+                # 将旧日志重命名为OBUprevious.log
+                if os.path.exists('OBUprevious.log'):   #检查旧归档日志是否存在
+                    os.remove('OBUprevious.log')   #删除旧归档日志
+                os.rename('OBUlatest.log', 'OBUprevious.log')   #重命名当前日志为归档日志
+            else:   #如果禁用归档功能，直接删除旧日志
+                os.remove('OBUlatest.log')   #删除旧日志文件
+        log_file = open('OBUlatest.log', 'a', encoding='utf-8')   #以追加模式打开日志文件
+        file_logging_enabled = True   #标记文件日志已启用
+        # 写入版权信息和开始运行时间戳到控制台和日志文件
+        header = 'Office Backup Utilities 6.3\nCopyright (C) 2024-2026 TonyV2Intl\nSession starts at: ' + time.strftime('%Y-%m-%d %H:%M:%S')   #构建日志头信息
+        print(header + '\n')   #打印到控制台
+        log_file.write(header + '\n\n')   #写入日志文件
+        log_file.flush()   #刷新文件缓冲区，确保日志消息立即写入文件
+    except (OSError, IOError) as e:
+        startup_warnings.append('Failed to initialize file logging: ' + type(e).__name__ + ': ' + str(e) + '; continuing with console-only logging')
+        config['save_log'] = False   #仅在内存中禁用文件日志
+        log_file = None   #确保后续日志不会使用失败的句柄
 
 def log_print(msg, source='main'):   #定义日志打印函数
+    global log_file, file_logging_enabled, log_write_error_reported   #声明日志状态变量
     global runid    #声明全局变量runid，以便在函数内修改其值
     runid+=1   #运行计数器累加
     log_msg= time.strftime('[%H:%M:%S-#') + str(runid) + '-' + source + '] ' + msg   # 打印带时间戳和来源的日志消息到控制台
     print(log_msg)   # 打印日志消息到控制台
-    if config.get('save_log'):   #如果启用日志保存功能，则将日志消息写入日志文件
-        log_file.write(log_msg + '\n')   # 将日志消息写入日志文件
-        log_file.flush()   #刷新文件缓冲区，确保日志消息立即写入文件
+    if config.get('save_log') and file_logging_enabled and log_file is not None and not log_file.closed:   #如果启用日志保存功能，则将日志消息写入日志文件
+        try:
+            log_file.write(log_msg + '\n')   # 将日志消息写入日志文件
+            log_file.flush()   #刷新文件缓冲区，确保日志消息立即写入文件
+        except (OSError, IOError, ValueError) as e:
+            file_logging_enabled = False   #写入失败后禁用本次会话的文件日志
+            config['save_log'] = False   #仅在内存中禁用文件日志
+            if not log_write_error_reported:
+                log_write_error_reported = True
+                print('[ERROR] File logging disabled after write failure: ' + type(e).__name__ + ': ' + str(e), file=sys.stderr)
 
 
 
@@ -119,6 +159,22 @@ openlist_remote_files = set()  # 远端OpenList目标文件夹中的文件列表
 openlist_ready = False  # OpenList初始化完成标志
 openlist_init_started = False  # OpenList初始化线程启动标志（用于延迟初始化）
 accurate_backup_running = False  # 精确备份线程运行标志
+
+def log_exception(context, error, source='main'):   #记录异常类型、消息和完整堆栈
+    log_print(context + ': ' + type(error).__name__ + ': ' + str(error) + '\n' + traceback.format_exc(), source=source)
+
+def validate_positive_number(value, default_value, setting_name):   #校验必须为正数的配置项
+    try:
+        checked_value = float(value)
+        if checked_value > 0:
+            return checked_value
+    except (TypeError, ValueError):
+        pass
+    log_print('Invalid ' + setting_name + ' value ' + repr(value) + ', using default ' + str(default_value))
+    return default_value
+
+for startup_warning in startup_warnings:   #回放配置和日志初始化阶段产生的启动警告
+    log_print('STARTUP WARNING: ' + startup_warning)
 
 def is_file_in_upload_queue(file_name):   #检查文件是否已在上传队列中，避免重复入队
     with upload_thread_lock:   #获取上传线程锁，保证线程安全
@@ -146,7 +202,9 @@ def is_file_on_openlist(file_name):   #检查文件是否存在于远端OpenList
     return file_name in openlist_remote_files
     
 #从配置文件读取变量
-sleeptime=config.get('interval')   #轮询间隔（默认为60秒）
+sleeptime=validate_positive_number(config.get('interval'), 60, 'interval')   #轮询间隔（默认为60秒）
+config['interval'] = sleeptime   #仅在内存中保存校验后的轮询间隔
+config['backup_timeout'] = validate_positive_number(config.get('backup_timeout'), 600, 'backup_timeout')   #备份超时时间（默认为600秒）
 ppt_save_folder=config.get('ppt_backup_path')   #ppt备份路径
 word_save_folder=config.get('word_backup_path')   #word备份路径
 '''behavior = config.get('tray_left_click_behavior')  # 托盘图标左键点击行为（默认为打开控制台）（无法生效）'''
@@ -224,7 +282,13 @@ async def chunked_stream_upload(client, target_file_path, local_file_path):   #�
                 headers["Content-Range"] = content_range   #设置Content-Range头（触发服务器分块上传逻辑）
 
                 async with session.put(upload_url, data=chunk_data, headers=headers) as response:   #发送PUT请求上传当前块
-                    result = await response.json()   #解析服务器响应JSON
+                    response_body = await response.text()   #先读取响应正文，兼容代理或服务器返回的非JSON错误页
+                    if response.status < 200 or response.status >= 300:   #检查HTTP状态码
+                        raise Exception('Chunk ' + str(chunk_index) + '/' + str(total_chunks) + ' upload failed with HTTP status ' + str(response.status) + ': ' + response_body[:300])
+                    try:
+                        result = json.loads(response_body)   #解析服务器响应JSON
+                    except (TypeError, ValueError):
+                        raise Exception('Chunk ' + str(chunk_index) + '/' + str(total_chunks) + ' returned HTTP status ' + str(response.status) + ' with non-JSON body: ' + response_body[:300])
                     if result.get("code") != 200:   #如果服务器返回非200状态码（上传失败）
                         raise Exception("Chunk " + str(chunk_index) + "/" + str(total_chunks) + " upload failed: " + str(result.get("message", "unknown error")))   #抛出异常，由外层错误处理捕获
 
@@ -237,18 +301,40 @@ async def chunked_stream_upload(client, target_file_path, local_file_path):   #�
     return True   #返回上传成功
 
 
+def record_abnormal_upload(upload_file, error_str):   #记录上传异常文件，避免记录失败覆盖原始错误
+    if config.get('log_abnormal_upload'):   #检查是否启用异常记录
+        try:
+            with open('OBUabnormal.txt', 'a', encoding='utf-8') as f:   #打开异常日志文件
+                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {upload_file} - {error_str}\n")   #写入异常信息
+        except Exception as e:
+            log_exception('Failed to write OBUabnormal.txt for ' + upload_file, e, source='openlist')
 
-def upload_to_openlist_thread():   #在单独线程中执行上传操作
+
+def _upload_to_openlist_thread_impl():   #执行OpenList上传操作
     retry_count = 0   #初始化重试计数器
     max_retries = config.get('upload_max_retries')   #获取最大重试次数配置
     if max_retries is None or max_retries == "":   #如果未配置或为空
         max_retries = float('inf')  # 无限次重试
     else:   #否则转换为整数
-        max_retries = int(max_retries)
+        try:
+            max_retries = int(max_retries)
+            if max_retries < 0:
+                raise ValueError('retry count must not be negative')
+        except (TypeError, ValueError):
+            log_print('Invalid upload_max_retries value ' + repr(config.get('upload_max_retries')) + ', using unlimited retries', source='openlist')
+            max_retries = float('inf')
 
     upload_retry_wait = config.get('upload_retry_wait', 30)   #获取重试等待时间配置
     if upload_retry_wait is None or upload_retry_wait == "":   #如果未配置或为空
         upload_retry_wait = 30   #默认为30秒
+    else:
+        try:
+            upload_retry_wait = float(upload_retry_wait)
+            if upload_retry_wait <= 0:
+                raise ValueError('retry wait must be positive')
+        except (TypeError, ValueError):
+            log_print('Invalid upload_retry_wait value ' + repr(config.get('upload_retry_wait')) + ', using default 30 seconds', source='openlist')
+            upload_retry_wait = 30
 
     while True:   #上传主循环
         # 当队列中有文件且上传功能启用时执行上传
@@ -287,9 +373,7 @@ def upload_to_openlist_thread():   #在单独线程中执行上传操作
                     else:   #登录失败
                         error_str = 'Login failed'   #构建错误信息
                         log_print('Login to OpenList failed', source='openlist')   #记录日志
-                        if config.get('log_abnormal_upload'):   #检查是否启用异常记录
-                            with open('OBUabnormal.txt', 'a', encoding='utf-8') as f:   #打开异常日志文件
-                                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {upload_file} - {error_str}\n")   #写入异常信息
+                        record_abnormal_upload(upload_file, error_str)   #记录异常文件
                         return False   #返回失败
                     
                     # 检查目标文件夹是否有效（使用mkdir测试）
@@ -301,9 +385,7 @@ def upload_to_openlist_thread():   #在单独线程中执行上传操作
                         error_str = 'Target folder invalid: ' + str(e)   #构建错误信息
                         log_print('Target folder invalid: ' + openlist_target_folder + ', error: ' + str(e), source='openlist')   #记录错误
                         log_print('Upload function disabled for this session, please check target folder path  is valid in the configuration file', source='openlist')   #提示用户检查配置
-                        if config.get('log_abnormal_upload'):   #检查是否启用异常记录
-                            with open('OBUabnormal.txt', 'a', encoding='utf-8') as f:   #打开异常日志文件
-                                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {upload_file} - {error_str}\n")   #写入异常信息
+                        record_abnormal_upload(upload_file, error_str)   #记录异常文件
                         config['upload_to_openlist_enable'] = False   #当前会话禁用上传功能（不修改配置文件）
                         return False   #返回失败
                     
@@ -329,9 +411,7 @@ def upload_to_openlist_thread():   #在单独线程中执行上传操作
                         else:   #上传返回False
                             error_str = 'Upload returned False'   #构建错误信息
                             log_print('Upload to OpenList failed: ' + error_str, source='openlist')   #记录失败日志
-                            if config.get('log_abnormal_upload'):   #检查是否启用异常记录
-                                with open('OBUabnormal.txt', 'a', encoding='utf-8') as f:   #打开异常日志文件
-                                    f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {upload_file} - {error_str}\n")   #写入异常信息
+                            record_abnormal_upload(upload_file, error_str)   #记录异常文件
                     except Exception as e:   #捕获上传异常
                         error_str = str(e)   #获取异常信息
                         log_print('Upload failed: ' + error_str, source='openlist')   #记录失败日志
@@ -340,11 +420,9 @@ def upload_to_openlist_thread():   #在单独线程中执行上传操作
                             try:
                                 await client.remove(target_file_path)   #尝试删除冲突文件
                                 log_print('Removed conflicting upload session', source='openlist')   #记录冲突解决
-                            except:   #删除失败则忽略
-                                pass
-                        if config.get('log_abnormal_upload'):   #检查是否启用异常记录
-                            with open('OBUabnormal.txt', 'a', encoding='utf-8') as f:   #打开异常日志文件
-                                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {upload_file} - {error_str}\n")   #写入异常信息
+                            except Exception as remove_error:   #删除失败则记录并继续
+                                log_exception('Failed to remove conflicting upload session for ' + upload_file, remove_error, source='openlist')
+                        record_abnormal_upload(upload_file, error_str)   #记录异常文件
                     
                     return upload_result   #返回上传结果
                 
@@ -370,12 +448,9 @@ def upload_to_openlist_thread():   #在单独线程中执行上传操作
                 
             except Exception as e:   #捕获上传过程中的异常
                 error_str = str(e)   #获取异常信息
-                log_print('Upload to OpenList failed: ' + error_str, source='openlist')   #记录失败日志
-                log_print('Traceback: ' + traceback.format_exc(), source='openlist')   #记录完整堆栈信息
+                log_exception('Upload to OpenList failed', e, source='openlist')
                 # 记录异常文件到OBUabnormal.txt
-                if config.get('log_abnormal_upload'):   #检查是否启用异常记录
-                    with open('OBUabnormal.txt', 'a', encoding='utf-8') as f:   #打开异常日志文件
-                        f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {upload_file} - {error_str}\n")   #写入异常信息
+                record_abnormal_upload(upload_file, error_str)   #记录异常文件
                 # 发生错误时，保留文件在队列中，等待下次上传
                 upload_end_time=datetime.datetime.now()   #记录上传操作结束时间
                 upload_used_time=upload_end_time-upload_start_time   #计算上传所用时间
@@ -406,6 +481,15 @@ def upload_to_openlist_thread():   #在单独线程中执行上传操作
     global upload_thread_running   #声明全局变量
     upload_thread_running = False   #标记上传线程已结束
     log_print('Upload thread finished', source='openlist')   #记录线程结束
+
+def upload_to_openlist_thread():   #在单独线程中执行上传操作
+    global upload_thread_running   #声明全局变量
+    try:
+        _upload_to_openlist_thread_impl()   #执行实际上传逻辑
+    except Exception as e:
+        log_exception('OpenList upload thread crashed', e, source='openlist')
+    finally:
+        upload_thread_running = False   #无论如何都解除上传线程运行标志
 
 def check_file_exists_on_openlist(file_name):   #检查文件在Openlist上是否存在（使用本地缓存）
     if not config.get('upload_to_openlist_enable'):   #检查上传功能是否启用
@@ -496,7 +580,7 @@ def test_openlist_connection():   #测试OpenList连接（登录+目标文件夹
             log_print('Upload function disabled for this session due to connection test failure', source='openlist')   #记录禁用信息
         return result   #返回测试结果
     except Exception as e:   #捕获其他异常
-        log_print('OpenList connection test failed: ' + str(e), source='openlist')   #记录连接测试失败
+        log_exception('OpenList connection test failed', e, source='openlist')
         config['upload_to_openlist_enable'] = False   #禁用上传功能
         return False   #返回失败
 
@@ -519,7 +603,7 @@ def upload_to_openlist():   #启动上传线程
             upload_thread_running = True   #标记上传线程正在运行
             upload_thread.start()   #启动上传线程
 
-def init_openlist_async():   #后台初始化OpenList连接和文件列表
+def _init_openlist_async_impl():   #执行后台初始化OpenList连接和文件列表
     global openlist_ready   #声明全局变量
     
     if not config.get('upload_to_openlist_enable'):   #检查上传功能是否启用
@@ -552,6 +636,15 @@ def init_openlist_async():   #后台初始化OpenList连接和文件列表
     if upload_queue and config.get('upload_to_openlist_enable'):   #检查队列非空且上传功能启用
         upload_to_openlist()   #启动上传线程
 
+def init_openlist_async():   #后台初始化OpenList连接和文件列表
+    global openlist_ready   #声明全局变量
+    try:
+        _init_openlist_async_impl()   #执行实际初始化逻辑
+    except Exception as e:
+        log_exception('OpenList initialization crashed', e, source='openlist')
+    finally:
+        openlist_ready = True   #无论初始化结果如何都解除等待状态
+
 
 if config.get('upload_to_openlist_enable'):   #检查上传功能是否启用
     if not openlist_url or not openlist_username or not openlist_target_folder:   #检查OpenList配置是否完整（密码可为空）
@@ -576,6 +669,7 @@ def timeout(seconds, config_key=None):   #定义超时装饰器，seconds为默�
                 timeout_value = config.get(config_key, seconds)   #从配置获取超时时间
                 if timeout_value is None or timeout_value == "":   #如果配置值为空
                     timeout_value = seconds   #使用默认值
+                timeout_value = validate_positive_number(timeout_value, seconds, config_key)   #校验超时时间
             
             # 超时标志
             timeout_occurred = [False]   #使用列表实现可变对象引用
@@ -592,8 +686,8 @@ def timeout(seconds, config_key=None):   #定义超时装饰器，seconds为默�
                         try:
                             log_file.close()   #关闭日志文件
                             # 注意：关闭后不要再调用 log_print
-                        except:   #关闭失败则忽略
-                            pass
+                        except Exception as e:   #关闭失败时报告到标准错误
+                            print('[ERROR] Failed to close log file before restart: ' + type(e).__name__ + ': ' + str(e) + '\n' + traceback.format_exc(), file=sys.stderr)
                     # 启动新实例
                     try:
                         # 获取当前运行的可执行文件路径
@@ -606,14 +700,16 @@ def timeout(seconds, config_key=None):   #定义超时装饰器，seconds为默�
                         subprocess.Popen([current_exe])   #启动新进程
                         time.sleep(1)  # 给新进程启动时间
                     except Exception as e:   #启动失败
+                        primary_restart_error = type(e).__name__ + ': ' + str(e) + '\n' + traceback.format_exc()
                         # 如果sys.argv[0]失败，尝试其他方法
                         try:
                             # 尝试使用__file__（适用于未打包的情况）
                             script_path = os.path.abspath(__file__)   #获取脚本路径
                             subprocess.Popen([sys.executable, script_path])   #使用Python解释器启动
                             time.sleep(1)   #给新进程启动时间
-                        except:   #再次失败则忽略
-                            pass
+                        except Exception as fallback_error:   #再次启动失败时报告两个错误
+                            fallback_restart_error = type(fallback_error).__name__ + ': ' + str(fallback_error) + '\n' + traceback.format_exc()
+                            print('[ERROR] Failed to relaunch program using executable:\n' + primary_restart_error + '\n[ERROR] Fallback relaunch also failed:\n' + fallback_restart_error, file=sys.stderr)
                     # 强制退出
                     os._exit(1)   #强制退出当前进程
             
@@ -629,7 +725,7 @@ def timeout(seconds, config_key=None):   #定义超时装饰器，seconds为默�
                 timeout_occurred[0] = True   #标记函数执行完成
                 return result   #返回函数执行结果
             except Exception as e:   #捕获函数执行异常
-                log_print(f"Error in {func.__name__}: {str(e)}")   #记录异常信息
+                log_exception('Error in ' + func.__name__, e)
                 timeout_occurred[0] = True   #标记执行完成（异常）
                 return None   #返回None
         return wrapper   #返回包装函数
@@ -645,7 +741,7 @@ def calculate_md5(file_path):  # 计算文件的MD5值
                 hash_md5.update(chunk)   #更新MD5哈希值
         return hash_md5.hexdigest()   #返回十六进制MD5值
     except Exception as e:   #捕获异常
-        log_print('Error calculating MD5 for ' + file_path + ': ' + str(e))   #记录错误信息
+        log_exception('Error calculating MD5 for ' + file_path, e)
         return None   #返回None
 
 # 辅助函数：检查并移除文件只读属性
@@ -659,7 +755,7 @@ def remove_readonly(file_path):   #移除文件只读属性
                 os.chmod(file_path, attrs | 0o200)  # 添加写入权限
                 log_print(f"Removed readonly attribute from {file_path}")   #记录移除只读属性
     except Exception as e:   #捕获异常
-        log_print(f"Error removing readonly from {file_path}: {e}")   #记录错误信息
+        log_exception('Error removing readonly from ' + file_path, e)
 
 def _backup_open_files(save_folder, app_progid, use_get_object, collection_attr, file_type_label):   #通用备份函数，参数化不同Office应用的差异
     global upload_queue   #声明全局上传队列变量
@@ -676,7 +772,7 @@ def _backup_open_files(save_folder, app_progid, use_get_object, collection_attr,
 
         any_backup_performed = False   #标记本轮是否有任何备份操作
         
-        for target_file in file_collection:   #遍历所有打开的文档
+        def backup_one_file(target_file):   #处理单个打开的文档，失败后由外层继续下一个文档
             target_file_path = target_file.FullName   #获取文件的完整路径
             target_file_name = os.path.basename(target_file_path)   #提取文件名
             backup_file_path = os.path.join(save_folder, target_file_name)   #生成备份文件路径
@@ -684,18 +780,15 @@ def _backup_open_files(save_folder, app_progid, use_get_object, collection_attr,
             if os.path.exists(backup_file_path):   #检查备份文件是否已存在
                 if SaveAs_method_activated[target_file_name] == True:   #如果SaveAs方法已被激活
                     log_print(target_file_name + ' has already existed in ' + save_folder + ', skipped backup (SaveAs method activated)')   #打印跳过信息
-                    continue   #跳过此次备份
-                
+                    return False   #跳过此次备份
                 original_md5 = calculate_md5(target_file_path)   #计算源文件的MD5值
                 backup_md5 = calculate_md5(backup_file_path)   #计算备份文件的MD5值
-                
                 if original_md5 and backup_md5 and original_md5 == backup_md5:   #两个MD5都成功计算且相同
                     if not Existed_in_this_session[target_file_name]:   #本次会话中首次出现该文件
                         Existed_in_this_session[target_file_name] = True   #标记为已出现过
                         current_time = time.time()   #获取当前时间
                         os.utime(backup_file_path, (os.path.getatime(backup_file_path), current_time))   #更新修改时间为当前时间
                         log_print(target_file_name + ' first appeared in this session, updated modification time')   #打印时间更新日志
-                    
                     if config.get('upload_to_openlist_enable'):   #检查是否启用了OpenList上传
                         log_print(target_file_name + ' has already existed in ' + save_folder + ', checking OpenList')   #打印检查OpenList信息
                         if not check_file_exists_on_openlist(target_file_name):   #检查文件是否存在于远端
@@ -707,13 +800,13 @@ def _backup_open_files(save_folder, app_progid, use_get_object, collection_attr,
                             log_print(target_file_name + ' already exists on OpenList, skipped upload')   #打印跳过上传日志
                     else:   #未启用OpenList上传
                         log_print(target_file_name + ' has already existed in ' + save_folder + ', skipped backup (MD5 match)')   #打印MD5相同跳过信息
-                    continue   #跳过此次备份
+                    return False   #跳过此次备份
                 elif original_md5 is None:   #源文件MD5计算失败（可能文件找不到）
                     log_print(target_file_name + ' source file not found, skipping this backup')   #打印跳过信息
-                    continue   #跳过此次备份
+                    return False   #跳过此次备份
                 else:   #MD5值不同，文件已修改
                     log_print(target_file_name + ' has changed, backup will begin soon (MD5 mismatch)')   #打印文件变更信息
-            
+
             Existed_in_this_session[target_file_name] = True   #标记该文件在本次会话中出现过
             log_print('Start to backup ' + target_file_name + ' to ' + save_folder)   #打印备份开始信息
             remove_readonly(backup_file_path)   #如果目标文件存在，先移除只读属性
@@ -721,50 +814,71 @@ def _backup_open_files(save_folder, app_progid, use_get_object, collection_attr,
             shutil.copy2(target_file_path, backup_file_path)   #复制文件到备份文件夹，保留元数据
             copy_end_time = datetime.datetime.now()   #记录复制操作结束时间
             copy_used_time = copy_end_time - copy_start_time   #计算复制所用时间
-
             current_time = time.time()   #获取当前时间
             os.utime(backup_file_path, (os.path.getatime(backup_file_path), current_time))   #设置修改时间为备份发生的时间
-
             file_skip_count[target_file_name] = 0   #重置该文件的跳过计数器
-            any_backup_performed = True   #标记本轮有备份操作
             log_print('Successfully backuped ' + target_file_name + ' to ' + save_folder + ' in ' + str(copy_used_time) + ' s')   #打印备份成功信息
-
             if config.get('upload_to_openlist_enable'):   #检查是否启用了OpenList上传
                 if add_to_upload_queue(target_file_name, backup_file_path):   #原子性添加到上传队列
                     log_print(target_file_name + ' not found on OpenList, adding to upload queue')   #打印添加上传队列日志
                 else:   #文件已在队列中
                     log_print(target_file_name + ' already in upload queue, skipped')   #打印重复入队日志
+            return True   #返回本次确实执行了备份
+
+        for target_file in file_collection:   #遍历所有打开的文档
+            try:
+                if backup_one_file(target_file):   #处理当前文档
+                    any_backup_performed = True   #标记本轮有备份操作
+            except Exception as e:
+                try:
+                    failed_file_name = target_file.FullName
+                except Exception:
+                    failed_file_name = '<unknown document>'
+                log_exception('Failed to backup open ' + file_type_label + ' ' + str(failed_file_name), e)
         upload_to_openlist()   #启动上传线程
 
         if not any_backup_performed and len(file_collection) == 0:   #没有可备份文件
             log_print('No ' + file_type_label + ' available now (Normal request)')   #打印无文件信息
 
-    except FileNotFoundError:   #捕获移动存储介质移除导致的文件未找到异常，使用SaveAs方法备份
-        if not os.path.exists(save_folder):   #检查备份目录是否存在
-            os.makedirs(save_folder)   #若不存在则创建备份目录
-            log_print('Target backup folder not found, created: ' + save_folder + ' successfully')   #打印创建成功信息
+    except FileNotFoundError as e:   #捕获移动存储介质移除导致的文件未找到异常，使用SaveAs方法备份
+        if 'file_collection' not in locals():   #如果获取文档集合前就失败
+            log_exception('File not found before opening ' + file_type_label + ' document collection', e)
+            return   #无法使用SaveAs方式继续
+        try:
+            if not os.path.exists(save_folder):   #检查备份目录是否存在
+                os.makedirs(save_folder)   #若不存在则创建备份目录
+                log_print('Target backup folder not found, created: ' + save_folder + ' successfully')   #打印创建成功信息
+        except Exception as folder_error:
+            log_exception('Failed to prepare SaveAs backup folder ' + save_folder, folder_error)
+            return   #目录不可用时无法继续
 
         for idx in range(1, file_collection.Count + 1):   #遍历文档集合（使用索引方式）
-            target_file = file_collection.Item(idx)   #获取当前文档对象
-            target_file_path = target_file.FullName   #获取文件完整路径
-            target_file_name = os.path.basename(target_file_path)   #提取文件名
-            backup_file_path = os.path.join(save_folder, target_file_name)   #生成备份路径
-            log_print('Start to backup ' + target_file_name + ' to ' + save_folder + ' using SaveAs method')   #打印SaveAs备份开始信息
-            remove_readonly(backup_file_path)   #移除目标文件只读属性
-            save_start_time = datetime.datetime.now()   #记录保存操作开始时间
-            target_file.SaveAs(backup_file_path)   #使用SaveAs方法保存文档到指定路径
-            save_end_time = datetime.datetime.now()   #记录保存操作结束时间
-            save_used_time = save_end_time - save_start_time   #计算保存所用时间
-            SaveAs_method_activated[target_file_name] = True   #标记该文件已激活SaveAs方法
-            log_print('Detected access control, activated SaveAs method, successfully backuped ' + target_file_name + ' to ' + save_folder + ' in ' + str(save_used_time) + ' s')   #打印SaveAs备份成功信息
-
-            add_to_upload_queue(target_file_name, backup_file_path)   #添加到上传队列
-            upload_to_openlist()   #启动上传线程
+            try:
+                target_file = file_collection.Item(idx)   #获取当前文档对象
+                target_file_path = target_file.FullName   #获取文件完整路径
+                target_file_name = os.path.basename(target_file_path)   #提取文件名
+                backup_file_path = os.path.join(save_folder, target_file_name)   #生成备份路径
+                log_print('Start to backup ' + target_file_name + ' to ' + save_folder + ' using SaveAs method')   #打印SaveAs备份开始信息
+                remove_readonly(backup_file_path)   #移除目标文件只读属性
+                save_start_time = datetime.datetime.now()   #记录保存操作开始时间
+                target_file.SaveAs(backup_file_path)   #使用SaveAs方法保存文档到指定路径
+                save_end_time = datetime.datetime.now()   #记录保存操作结束时间
+                save_used_time = save_end_time - save_start_time   #计算保存所用时间
+                SaveAs_method_activated[target_file_name] = True   #标记该文件已激活SaveAs方法
+                log_print('Detected access control, activated SaveAs method, successfully backuped ' + target_file_name + ' to ' + save_folder + ' in ' + str(save_used_time) + ' s')   #打印SaveAs备份成功信息
+                add_to_upload_queue(target_file_name, backup_file_path)   #添加到上传队列
+                upload_to_openlist()   #启动上传线程
+            except Exception as save_error:
+                try:
+                    failed_file_name = target_file.FullName
+                except Exception:
+                    failed_file_name = '<unknown document>'
+                log_exception('Failed to SaveAs ' + file_type_label + ' ' + str(failed_file_name), save_error)
     except Exception as e:   #捕获其他所有异常
         if type(e).__name__ == 'com_error':   #如果是COM错误（无打开的应用实例）
             log_print('No ' + file_type_label + ' available now (' + app_progid.split('.')[0] + ' application not detected)')   #打印应用未检测到信息
         else:   #其他类型的错误
-            log_print('Exception: ' + type(e).__name__ + ', request continue')   #打印异常信息并继续
+            log_exception('Exception while backing up ' + file_type_label, e)
 
 
 @timeout(seconds=600, config_key='backup_timeout')  #添加10分钟超时机制
@@ -826,11 +940,11 @@ def accurate_backup():   #定义精确备份函数
                     json.dump(config, f, indent=4, ensure_ascii=False)   #写回配置
                 log_print('Accurate backup disabled after successful backup')   #记录禁用信息
             except Exception as e:   #写入失败
-                log_print('Failed to update config file: ' + str(e))   #记录错误
+                log_exception('Failed to update config file', e)
         else:   #源文件夹不存在
             log_print('Source path for accurate backup does not exist: ' + source_path + ', wait for the next request')  # 打印源文件夹不存在信息，等待下次请求
     except Exception as e:   #捕获异常
-        log_print('Accurate backup failed: ' + str(e))  # 打印精确备份失败信息
+        log_exception('Accurate backup failed', e)
     finally:   #无论成功或失败都执行
         accurate_backup_running = False   #标记精确备份已结束
     
@@ -881,34 +995,40 @@ menu = (item('Show/Hide console window', toggle_console), item('Exit program', e
 icon = pystray.Icon("office_backup_utilities", image, "Office Backup Utilities", menu)   #创建托盘图标对象
 '''icon.on_left_click = on_clicked   #绑定左键单击事件处理函数（无法生效）'''
 
+def global_exception_handler(exctype, value, tb):   #处理全局未捕获异常
+    if issubclass(exctype, KeyboardInterrupt):   #正常响应Ctrl+C
+        sys.__excepthook__(exctype, value, tb)
+        return
+    error_msg = "".join(traceback.format_exception(exctype, value, tb))   #格式化异常信息
+    print(f"[ERROR] {error_msg}")   #输出到控制台
+    try:
+        log_print('[ERROR] ' + error_msg)   #安全地写入日志文件或控制台
+    except Exception as log_error:
+        print('[ERROR] Failed to record uncaught exception: ' + type(log_error).__name__ + ': ' + str(log_error) + '\n' + traceback.format_exc(), file=sys.stderr)
+
+def threading_exception_handler(args):   #处理守护线程未捕获异常
+    if issubclass(args.exc_type, KeyboardInterrupt):   #正常响应Ctrl+C，不重复输出错误
+        threading.__excepthook__(args)
+        return
+    try:
+        global_exception_handler(args.exc_type, args.exc_value, args.exc_traceback)
+    except Exception as e:
+        print('[ERROR] Thread exception handler failed: ' + type(e).__name__ + ': ' + str(e) + '\n' + traceback.format_exc(), file=sys.stderr)
+
+threading.excepthook = threading_exception_handler   #注册守护线程异常处理器
+
 # 根据配置决定是否启动托盘图标
 if not config.get('hide_tray_icon'):   #检查是否隐藏托盘图标
     icon_task = threading.Thread(target=icon.run)   #创建托盘图标线程
     icon_task.daemon = True   #设置为守护线程（随主程序终止而自动结束）
     icon_task.start()   #启动托盘图标线程
 
-# 全局异常处理函数
-def global_exception_handler(exctype, value, tb):   #处理全局未捕获异常
-    # 构建完整的错误信息，包括 Traceback (most recent call last):
-    error_msg = "".join(traceback.format_exception(exctype, value, tb))   #格式化异常信息
-    
-    # 打印到控制台
-    print(f"[ERROR] {error_msg}")   #输出到控制台
-    
-    # 写入日志文件
-    if config.get('save_log'):   #检查是否保存日志
-        log_msg = time.strftime('[%H:%M:%S]') + ' [ERROR] ' + error_msg   #构建日志消息
-        log_file.write(log_msg + '\n')   #写入日志文件
-        log_file.flush()   #刷新文件缓冲区
-
 # 设置全局异常处理器
 sys.excepthook = global_exception_handler   #注册全局异常处理器
 
 
 print('Program initialization completed, entering main loop\n')   #打印初始化完成信息
-if config.get('save_log'):   #检查是否保存日志
-    log_file.write('Program initialization completed, entering main loop\n\n')   #写入日志文件
-    log_file.flush()   #刷新文件缓冲区，确保日志消息立即写入文件
+log_print('Program initialization completed, entering main loop')   #记录初始化完成信息
 
 while True:   #主线程无限循环，防止程序退出
     if config.get('ppt_backup_enable'):   #检查PPT备份功能是否启用
