@@ -1,5 +1,8 @@
 # [OBU] Office Backup Utilities
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/TonyV2Intl/Office-backup-utilities)
+[![Powered by OrcaRouter](https://img.shields.io/badge/Powered_by-OrcaRouter-2563eb)](https://www.orcarouter.ai/ref/ref_b2dd2f7a8c5461d33e17)
+
 **一个用来备份当前打开的PPT和Word文档并上传到云存储的Python小程序**  
 **A Python-based mini program for backing up currently opened Powerpoint & Word documents and uploading them to cloud storage.**  
   
