@@ -1,3 +1,5 @@
+[![Powered by OrcaRouter](https://img.shields.io/badge/Powered_by-OrcaRouter-2563eb)](https://www.orcarouter.ai/ref/ref_b2dd2f7a8c5461d33e17)
+
 **一个用来备份当前打开的PPT和Word文档并上传网盘的Python小程序**<br>
 **A Python-based mini program for backing up currently opened PPT and Word documents and uploading them to cloud drives**<br>
 <br>
