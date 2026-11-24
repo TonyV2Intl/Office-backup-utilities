@@ -119,6 +119,10 @@ openlist_remote_files = set()  # 远端OpenList目标文件夹中的文件列表
 openlist_ready = False  # OpenList初始化完成标志
 openlist_init_started = False  # OpenList初始化线程启动标志（用于延迟初始化）
 accurate_backup_running = False  # 精确备份线程运行标志
+icon = None   #托盘图标对象（在模块末尾创建，这里先初始化为None，确保退出流程可安全调用）
+icon_task = None   #托盘图标线程对象（未启用托盘时为None）
+shutdown_lock = threading.Lock()   #退出流程互斥锁，保证退出逻辑只执行一次
+shutdown_started = False   #退出流程是否已开始
 
 def is_file_in_upload_queue(file_name):   #检查文件是否已在上传队列中，避免重复入队
     with upload_thread_lock:   #获取上传线程锁，保证线程安全
@@ -587,9 +591,13 @@ def timeout(seconds, config_key=None):   #定义超时装饰器，seconds为默�
                     timeout_occurred[0] = True   #标记超时发生
                     # 先打印超时信息（此时日志文件还未关闭）
                     log_print(f"Function {func.__name__} exceeded timeout of {timeout_value} seconds, restarting program")   #记录超时信息
+                    # 先同步移除托盘图标，再重启，避免旧图标残留在通知区域
+                    stop_tray_icon(3.0)   #直接删除图标并等待图标线程退出
                     # 关闭日志文件，解除占用
+                    config['save_log'] = False   #先禁用后续日志写入，避免其他线程向已关闭的文件写入
                     if 'log_file' in globals():   #检查日志文件是否存在
                         try:
+                            log_file.flush()   #刷新缓冲区
                             log_file.close()   #关闭日志文件
                             # 注意：关闭后不要再调用 log_print
                         except:   #关闭失败则忽略
@@ -846,9 +854,61 @@ def toggle_console():   #切换控制台窗口的显示/隐藏状态
         ctypes.windll.user32.ShowWindow(console_window, 1)  # SW_SHOWNORMAL，显示控制台窗口
         console_visible = True   #标记控制台已显示
 
-def exit_program(icon):   #退出程序
-    icon.stop()   #停止托盘图标
-    os._exit(0)   #强制退出程序
+def stop_tray_icon(wait_timeout=3.0):   #同步移除托盘图标并等待图标线程退出，避免通知区域留下“幽灵图标”
+    if icon is None:   #托盘图标对象尚未创建（例如程序初始化早期）
+        return   #无需处理
+    try:
+        if icon.visible:   #图标当前显示在通知区域
+            icon.visible = False   #直接调用Shell_NotifyIcon(NIM_DELETE)同步删除图标，不依赖消息循环
+    except Exception as e:   #删除失败不影响后续退出流程
+        log_print('Failed to hide tray icon: ' + str(e))   #记录错误
+    try:
+        icon.stop()   #向图标窗口投递WM_STOP，请求消息循环退出（图标线程的finally中会再次删除图标）
+    except Exception as e:   #停止失败不影响后续退出流程
+        log_print('Failed to stop tray icon loop: ' + str(e))   #记录错误
+    if icon_task is not None and icon_task.is_alive() and icon_task is not threading.current_thread():   #图标线程仍在运行且不是当前线程
+        icon_task.join(wait_timeout)   #等待图标线程处理完WM_STOP并完成窗口销毁
+        if icon_task.is_alive():   #等待超时
+            log_print('Tray icon thread did not exit within ' + str(wait_timeout) + ' s')   #记录警告
+            try:
+                if icon.visible:   #等待期间图标可能刚被显示出来（启动瞬间退出时会出现）
+                    icon.visible = False   #再同步删除一次，确保不留残影
+            except Exception:   #忽略兜底删除异常
+                pass
+
+def _finalize_process_exit(exit_code):   #关闭日志并结束进程
+    try:
+        config['save_log'] = False   #先禁用后续日志写入，避免其他线程向已关闭的文件写入
+        if 'log_file' in globals():   #日志文件已打开
+            log_file.flush()   #刷新缓冲区
+            log_file.close()   #关闭日志文件
+    except Exception:   #忽略清理过程中的异常
+        pass
+    os._exit(exit_code)   #强制结束进程（此时托盘图标已删除）
+
+def _exit_after_tray_stopped(exit_code):   #等待图标线程退出后再结束进程（用于托盘菜单回调场景）
+    try:
+        if icon_task is not None and icon_task.is_alive():   #图标线程仍在运行
+            icon_task.join(3.0)   #等待其处理WM_STOP并完成NIM_DELETE
+    except Exception:   #忽略等待异常
+        pass
+    _finalize_process_exit(exit_code)   #结束进程
+
+def request_shutdown(exit_code=0):   #请求退出程序（幂等，可从任意线程调用）
+    global shutdown_started   #声明全局变量shutdown_started，以便在函数内修改其值
+    with shutdown_lock:   #加锁，保证退出流程只执行一次
+        if shutdown_started:   #退出流程已开始
+            return   #直接返回
+        shutdown_started = True   #标记退出流程已开始
+    log_print('Shutdown requested, removing tray icon')   #记录退出请求
+    stop_tray_icon()   #先移除托盘图标，确保进程退出后通知区域立即刷新
+    if icon_task is not None and icon_task is threading.current_thread():   #当前就在图标线程中（右键菜单回调运行在图标线程）
+        threading.Thread(target=_exit_after_tray_stopped, args=(exit_code,), daemon=True).start()   #交给后台线程等待图标线程退出，不能join自己
+        return   #此处不能直接os._exit，否则WM_STOP来不及处理，图标会残留
+    _finalize_process_exit(exit_code)   #其他线程直接走正常退出流程
+
+def exit_program(icon=None):   #退出程序（托盘菜单回调）
+    request_shutdown(0)   #执行统一退出流程，确保托盘图标被正确移除
 '''
 def on_clicked(icon):   #左键单击事件处理（无法生效）
     global behavior   #声明全局变量behavior，以便在函数内修改其值
@@ -887,6 +947,22 @@ if not config.get('hide_tray_icon'):   #检查是否隐藏托盘图标
     icon_task.daemon = True   #设置为守护线程（随主程序终止而自动结束）
     icon_task.start()   #启动托盘图标线程
 
+def _console_ctrl_handler(ctrl_type):   #控制台关闭/注销/关机事件处理（由系统在独立线程中调用）
+    if ctrl_type in (2, 5, 6):   #CTRL_CLOSE_EVENT=2 / CTRL_LOGOFF_EVENT=5 / CTRL_SHUTDOWN_EVENT=6
+        stop_tray_icon(3.0)   #用户点控制台右上角关闭时，先移除托盘图标，避免通知区域残留
+        try:
+            if config.get('save_log') and 'log_file' in globals():   #日志仍可写入
+                log_file.write(time.strftime('[%H:%M:%S]') + ' Console close event, tray icon removed\n')   #记录事件
+                log_file.flush()   #刷新缓冲区
+        except Exception:   #忽略日志异常
+            pass
+        return True   #事件已处理
+    return False   #Ctrl+C等其他事件交给默认处理
+
+if os.name == 'nt':   #仅在Windows下注册（本程序本身也只在Windows运行）
+    _console_ctrl_callback = ctypes.WINFUNCTYPE(ctypes.c_int, ctypes.c_uint)(_console_ctrl_handler)   #包装为Win32回调并保持全局引用，防止被垃圾回收
+    ctypes.windll.kernel32.SetConsoleCtrlHandler(_console_ctrl_callback, True)   #注册控制台事件处理器
+
 # 全局异常处理函数
 def global_exception_handler(exctype, value, tb):   #处理全局未捕获异常
     # 构建完整的错误信息，包括 Traceback (most recent call last):
@@ -900,6 +976,12 @@ def global_exception_handler(exctype, value, tb):   #处理全局未捕获异常
         log_msg = time.strftime('[%H:%M:%S]') + ' [ERROR] ' + error_msg   #构建日志消息
         log_file.write(log_msg + '\n')   #写入日志文件
         log_file.flush()   #刷新文件缓冲区
+
+    # 进程即将退出，先移除托盘图标，避免通知区域残留
+    try:
+        stop_tray_icon(2.0)   #同步删除图标并等待图标线程退出
+    except Exception:   #忽略清理异常（不能影响原始异常的输出）
+        pass
 
 # 设置全局异常处理器
 sys.excepthook = global_exception_handler   #注册全局异常处理器
